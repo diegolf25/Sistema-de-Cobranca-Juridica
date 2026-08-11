@@ -183,7 +183,7 @@
       <div class="dz-ico"><i class="fa-solid fa-file-arrow-up"></i></div>
       <div class="flex-grow-1">
         <div style="font-weight:600;">Conectar planilha do Aging List</div>
-        <div class="kpi-sub" id="dzStatus">Arraste aqui o arquivo <strong>.xls / .xlsx</strong> exportado do SAP B1 — ou clique em "Selecionar arquivo". A base fica <strong>salva neste navegador</strong> e reaparece automaticamente na próxima vez.</div>
+        <div class="kpi-sub" id="dzStatus">Carregando base oficial do repositório… Se preferir, arraste um arquivo <strong>.xls / .xlsx</strong> do SAP B1 para visualizar localmente.</div>
       </div>
       <div class="d-flex gap-2 flex-wrap">
         <label class="btn btn-primary btn-sm mb-0"><i class="fa-solid fa-folder-open me-1"></i> Selecionar arquivo
@@ -485,6 +485,34 @@ function lerArquivo(file){ const nome=file.name; const reader=new FileReader();
     catch(err){ alert('Erro ao ler o arquivo: '+err.message); } };
   reader.readAsArrayBuffer(file); }
 
+/* ============================================================
+   OPÇÃO 3 — Base compartilhada lida do próprio repositório.
+   Coloque no repositório um arquivo chamado "base_cobranca.xlsx"
+   (ou .xls) ao lado do index.html. Todos que abrirem o link
+   verão essa base automaticamente, sem precisar carregar nada.
+   Para atualizar: basta substituir esse arquivo no GitHub.
+   ============================================================ */
+const BASE_COMPARTILHADA = ['base_cobranca.xlsx','base_cobranca.xls','base_cobranca.csv'];
+async function carregarBaseCompartilhada(){
+  for(const nome of BASE_COMPARTILHADA){
+    try{
+      const resp = await fetch(nome, {cache:'no-store'});
+      if(!resp.ok) continue;
+      const buf = await resp.arrayBuffer();
+      if(!buf || buf.byteLength < 50) continue;      // arquivo vazio/placeholder
+      const wb = XLSX.read(buf, {type:'array', cellDates:false});
+      processarWorkbook(wb, nome);
+      // marca no rodapé que veio da base oficial do repositório
+      const lm = resp.headers.get('last-modified');
+      const quando = lm ? new Date(lm).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR');
+      document.getElementById('dzStatus').innerHTML =
+        `<span class="text-success"><i class="fa-solid fa-cloud-arrow-down me-1"></i>Base oficial carregada do repositório</span>: <strong>${nome}</strong> (${DADOS.length} títulos) • atualizada em ${quando}.`;
+      return true;
+    }catch(e){ /* tenta o próximo nome */ }
+  }
+  return false;
+}
+
 /* ===================== Navegação por abas ===================== */
 const TAB_META={
   visaogeral:{t:'Visão Geral',s:'Acompanhamento integrado da cobrança de títulos em aberto e das notificações judiciais'},
@@ -705,8 +733,19 @@ const dz=document.getElementById('dropzone');
 ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag');}));
 dz.addEventListener('drop',e=>{ if(e.dataTransfer.files[0]) lerArquivo(e.dataTransfer.files[0]); });
 
-/* ===================== Boot ===================== */
-(async function(){ const ok=await restaurarBase(); if(!ok) carregarDemo(); })();
+/* ===================== Boot =====================
+   Ordem de prioridade:
+   1) Base OFICIAL compartilhada no repositório (todos veem a mesma)
+   2) Base salva localmente neste navegador (IndexedDB)
+   3) Dados de exemplo (fallback)
+================================================== */
+(async function(){
+  const oficial = await carregarBaseCompartilhada();
+  if(oficial) return;
+  const local = await restaurarBase();
+  if(local) return;
+  carregarDemo();
+})();
 </script>
 </body>
 </html>
