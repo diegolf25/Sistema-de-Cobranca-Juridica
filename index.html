@@ -575,20 +575,22 @@ function renderPainelExecutivo(){
       const valor=d.valor||0;
       const dias=d.dias||0;
 
+      // 50% Valor Financeiro, ate 50 pontos
       let valorScore=0;
-      if(valor >= 100000) valorScore=25;
-      else if(valor >= 50000) valorScore=20;
-      else if(valor >= 20000) valorScore=15;
-      else if(valor >= 10000) valorScore=10;
-      else if(valor >= 5000) valorScore=5;
+      if(valor >= 100000) valorScore=50;
+      else if(valor >= 50000) valorScore=40;
+      else if(valor >= 20000) valorScore=30;
+      else if(valor >= 10000) valorScore=20;
+      else if(valor >= 5000) valorScore=10;
 
+      // 50% Dias de Atraso, ate 50 pontos
       let atrasoScore=0;
-      if(dias >= 180) atrasoScore=75;
-      else if(dias >= 120) atrasoScore=70;
-      else if(dias >= 90) atrasoScore=65;
-      else if(dias >= 60) atrasoScore=55;
-      else if(dias >= 30) atrasoScore=40;
-      else if(dias >= 15) atrasoScore=30;
+      if(dias >= 180) atrasoScore=50;
+      else if(dias >= 120) atrasoScore=45;
+      else if(dias >= 90) atrasoScore=40;
+      else if(dias >= 60) atrasoScore=35;
+      else if(dias >= 30) atrasoScore=25;
+      else if(dias >= 15) atrasoScore=15;
 
       return Math.min(100, valorScore + atrasoScore);
     }
