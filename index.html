@@ -206,7 +206,7 @@
       <div class="card card-panel shadow-sm mb-4">
         <div class="card-header">
           <span><i class="fa-solid fa-bolt text-warning me-2"></i>Painel Executivo 2.0</span>
-          <span class="sub">Cockpit gerencial: risco, atenção, prazos e cobertura jurídica</span>
+          <span class="sub">Cockpit gerencial: score de prioridade excluindo títulos em Ação Judicial</span>
         </div>
         <div class="card-body">
           <div class="row g-3 mb-3" id="painelPrioridadeCards"></div>
@@ -219,7 +219,7 @@
                 </div>
                 <div class="table-responsive">
                   <table class="table table-sm table-hover align-middle mb-0">
-                    <thead><tr><th>Cliente</th><th class="text-center">Status</th><th class="text-center">Dias</th><th class="text-center">Prazo</th><th class="text-end">Valor</th></tr></thead>
+                    <thead><tr><th>Cliente</th><th class="text-center">Status</th><th class="text-center">Dias</th><th class="text-center">Prazo</th><th class="text-center">Score</th><th class="text-end">Valor</th></tr></thead>
                     <tbody id="tblPrioridadeCritica"></tbody>
                   </table>
                 </div>
@@ -413,7 +413,7 @@ function processarWorkbook(wb, nomeArq){
   let cSaldo=mapCol(headers,['Total Pagamento']); if(cSaldo<0) cSaldo=(headers.length>13?13:mapCol(headers,['Saldo Parcela','Valor Devedor']));
   const cVenc=mapCol(headers,['Data Vencimento','Vencimento']);
   const cDias=mapCol(headers,['Dias Atraso','Dias de Atraso']);
-  const cTit=mapCol(headers,['Documento','Título','Nº Documento']);
+  const cTit=3; // Coluna D: Série do Documento
   const cParc=mapCol(headers,['Nº parcela','Parcela']);
   const cStatus=mapCol(headers,['STATUS COBRAN']);
   const cPrazo=mapCol(headers,['PRAZO NOTIFICA']);
@@ -425,7 +425,8 @@ function processarWorkbook(wb, nomeArq){
     if(isNaN(dias)&&venc) dias=Math.floor((hoje-venc)/86400000); dias=dias||0; if(dias<=0) continue;
     const rj=/RECUPERACAO JUDICIAL|RECUPERAÇÃO JUDICIAL/.test(norm(razao));
     const stPlan=cStatus>=0?statusFromPlanilha(r[cStatus]):STATUS_DEFAULT;
-    const id='TIT-'+(cTit>=0?r[cTit]:i)+(cParc>=0&&r[cParc]?('/'+r[cParc]):'');
+    const serieDoc=(r[cTit]!==undefined&&r[cTit]!==null&&r[cTit]!==''?r[cTit]:i);
+    const id='TIT-'+serieDoc;
     DADOS.push({ id, cli:(cli||'').toString(), doc:(cDoc>=0?r[cDoc]:'').toString(), venc, dias, valor:saldo, rj,
       statusPlanilha:stPlan, status:getStatus(id,stPlan), prazo:cPrazo>=0?parseData(r[cPrazo]):null }); }
   if(!DADOS.length){ alert('Não encontrei títulos em aberto válidos. Verifique as colunas.'); return; }
@@ -563,54 +564,88 @@ function renderClientesPct(){ const grupos=agruparClientes(); const totalGeral=g
     data:{labels,datasets:[{label:'% da dívida total',data:pcts,backgroundColor:cores,borderRadius:5,maxBarThickness:34,_valores:valores}]},
     options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.parsed.x}% • ${brl(c.dataset._valores[c.dataIndex])}`}}},scales:{x:{beginAtZero:true,grid:{color:'#f1f3f5'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false}}}} }); }
 function renderPainelExecutivo(){
-  const hoje=new Date();
-  const ddPrazo=d=>d.prazo?Math.ceil((d.prazo-hoje)/86400000):null;
+    const hoje=new Date();
+    const ddPrazo=d=>d.prazo?Math.ceil((d.prazo-hoje)/86400000):null;
+    const maxValor=Math.max(...DADOS.map(d=>d.valor||0),1);
+    const maxDias=Math.max(...DADOS.map(d=>d.dias||0),1);
 
-  // Painel Executivo 2.0
-  // Mantém Ação Judicial fora da lista de Casos Críticos priorizados,
-  // mas inclui Ação Judicial no cálculo da Cobertura Jurídica.
-  const valorCritico=DADOS.filter(d=>d.status!=='acao' && (d.dias>90 || d.status==='notificacao' || (ddPrazo(d)!==null && ddPrazo(d)<0)));
-  const valorAtencao=DADOS.filter(d=>d.status!=='acao' && !valorCritico.includes(d) && ((d.dias>=60 && d.dias<=90) || d.status==='comercial'));
-  const semPrazo=DADOS.filter(d=>!d.prazo);
-  const vence7=DADOS.filter(d=>{const x=ddPrazo(d); return x!==null && x>=0 && x<=7;});
-  const juridico=DADOS.filter(d=>STATUS_JURIDICO.includes(d.status));
-  const totalCarteira=DADOS.reduce((s,d)=>s+d.valor,0)||1;
-  const coberturaPct=(juridico.reduce((s,d)=>s+d.valor,0)/totalCarteira*100);
+    // Nova Inteligência de Priorização
+    // Score 0-100: 50% valor financeiro relativo, 35% atraso relativo, 15% urgência do prazo de notificação.
+    function scorePrioridade(d){
+      const valor=d.valor||0;
+      const dias=d.dias||0;
 
-  const cards=[
-    {tipo:'valor',cor:'vermelho',ico:'fa-circle-exclamation',label:'Valor Crítico',qtd:valorCritico.length,valor:valorCritico.reduce((s,d)=>s+d.valor,0),sub:'>90 dias, notificação ou prazo vencido'},
-    {tipo:'valor',cor:'amarelo',ico:'fa-bell',label:'Valor em Atenção',qtd:valorAtencao.length,valor:valorAtencao.reduce((s,d)=>s+d.valor,0),sub:'60-90 dias ou cobrança comercial'},
-    {tipo:'valor',cor:'azul',ico:'fa-calendar-xmark',label:'Sem Prazo de Notificação',qtd:semPrazo.length,valor:semPrazo.reduce((s,d)=>s+d.valor,0),sub:'títulos sem prazo definido'},
-    {tipo:'cobertura',cor:'verde',ico:'fa-scale-balanced',label:'Cobertura Jurídica',qtd:juridico.length,valor:coberturaPct,sub:'notificação + ação judicial'},
-    {tipo:'valor',cor:'amarelo',ico:'fa-calendar-day',label:'Vencendo em 7 Dias',qtd:vence7.length,valor:vence7.reduce((s,d)=>s+d.valor,0),sub:'prazos com ação imediata'}
-  ];
+      let valorScore=0;
+      if(valor >= 100000) valorScore=25;
+      else if(valor >= 50000) valorScore=20;
+      else if(valor >= 20000) valorScore=15;
+      else if(valor >= 10000) valorScore=10;
+      else if(valor >= 5000) valorScore=5;
 
-  const el=document.getElementById('painelPrioridadeCards');
-  if(el){ el.innerHTML=cards.map(c=>{
-    const cls=c.cor==='vermelho'?'vermelho':c.cor==='amarelo'?'amarelo':c.cor==='azul'?'azul':'verde';
-    if(c.tipo==='cobertura'){
-      return `<div class="col-12 col-sm-6 col-xl"><div class="priority-card">
-        <div class="d-flex align-items-center justify-content-between mb-2"><div class="p-icon i-${c.cor}"><i class="fa-solid ${c.ico}"></i></div><span class="badge-soft bg-soft-${cls}">${c.qtd}</span></div>
-        <div class="priority-label">${c.label}</div><div class="priority-value">${c.valor.toFixed(1)}%</div><div class="mini-bar mt-2"><span style="width:${Math.min(c.valor,100).toFixed(1)}%;background:var(--verde)"></span></div><div class="kpi-sub mt-1">${c.sub}</div>
-      </div></div>`;
+      let atrasoScore=0;
+      if(dias >= 180) atrasoScore=75;
+      else if(dias >= 120) atrasoScore=70;
+      else if(dias >= 90) atrasoScore=65;
+      else if(dias >= 60) atrasoScore=55;
+      else if(dias >= 30) atrasoScore=40;
+      else if(dias >= 15) atrasoScore=30;
+
+      return Math.min(100, valorScore + atrasoScore);
     }
-    return `<div class="col-12 col-sm-6 col-xl"><div class="priority-card">
-      <div class="d-flex align-items-center justify-content-between mb-2"><div class="p-icon i-${c.cor}"><i class="fa-solid ${c.ico}"></i></div><span class="badge-soft bg-soft-${cls}">${c.qtd}</span></div>
-      <div class="priority-label">${c.label}</div><div class="priority-value">${brlShort(c.valor)}</div><div class="kpi-sub">${c.sub}</div>
-    </div></div>`;
-  }).join(''); }
+    function scoreBadge(score){
+      const cls=score>=80?'bg-soft-vermelho':(score>=65?'bg-soft-amarelo':(score>=45?'bg-soft-azul':'bg-soft-cinza'));
+      return `<span class="badge-soft ${cls}">${score}</span>`;
+    }
 
-  const tb=document.getElementById('tblPrioridadeCritica');
-  if(tb){ const lista=valorCritico.sort((a,b)=>(b.valor+b.dias*1000)-(a.valor+a.dias*1000)).slice(0,8);
-    tb.innerHTML=lista.length?lista.map(d=>{ const s=statusMap[d.status]; const x=ddPrazo(d); const p=x===null?'—':(x<0?'Vencido':x+' d');
-      return `<tr><td><div class="cli-nome">${d.cli}</div><div class="cli-doc">${d.id}</div></td><td class="text-center"><span class="badge-soft ${s.cls}">${s.txt}</span></td><td class="text-center ${d.dias>=90?'text-danger fw-bold':''}">${d.dias} d</td><td class="text-center">${p}</td><td class="text-end fw-semibold">${brl(d.valor)}</td></tr>`; }).join('')
-    : `<tr><td colspan="5">${emptyState('Nenhum caso crítico identificado fora de Ação Judicial.')}</td></tr>`; }
+    const base=DADOS.filter(d=>d.status!=='acao').map(d=>({...d,score:scorePrioridade(d)}));
+    const critico=base.filter(d=>d.score>=45);
+    const alta=base.filter(d=>d.score>=30&&d.score<45);
+    const media=base.filter(d=>d.score>=10&&d.score<30);
+    const baixa=base.filter(d=>d.score<10);
 
-  const top=document.getElementById('top5Devedores');
-  if(top){ const grupos=agruparClientes().slice(0,10); const total=DADOS.reduce((s,d)=>s+d.valor,0)||1;
-    top.innerHTML=grupos.length?grupos.map((g,i)=>{ const pct=(g.total/total*100); return `<div class="mb-3"><div class="d-flex justify-content-between"><span class="fw-semibold">${i+1}. ${g.cli.length>26?g.cli.slice(0,24)+'…':g.cli}</span><span>${brlShort(g.total)}</span></div><div class="mini-bar mt-1"><span style="width:${Math.min(pct,100).toFixed(1)}%;background:${i<3?'var(--vermelho)':i<6?'var(--amarelo)':'var(--azul)'}"></span></div><div class="kpi-sub mt-1">${pct.toFixed(1)}% da carteira • ${g.qt} título(s)</div></div>`; }).join('')
-    : emptyState('Nenhum cliente carregado.'); }
-}
+    if(!window.PAINEL_EXEC_FILTRO) window.PAINEL_EXEC_FILTRO='critico';
+    const listas={
+      critico:{titulo:'Prioridade Crítica',sub:'Score ≥ 45',dados:critico},
+      alta:{titulo:'Alta Prioridade',sub:'Score 30 a 44',dados:alta},
+      media:{titulo:'Média Prioridade',sub:'Score 10 a 29',dados:media},
+      baixa:{titulo:'Baixa Prioridade',sub:'Score abaixo de 10',dados:baixa},
+    };
+    if(!listas[window.PAINEL_EXEC_FILTRO]) window.PAINEL_EXEC_FILTRO='critico';
+
+    const cards=[
+      {key:'critico',cor:'vermelho',ico:'fa-triangle-exclamation',label:'Prioridade Crítica',qtd:critico.length,valor:critico.reduce((s,d)=>s+d.valor,0),sub:'score ≥ 45'},
+      {key:'alta',cor:'amarelo',ico:'fa-fire',label:'Alta Prioridade',qtd:alta.length,valor:alta.reduce((s,d)=>s+d.valor,0),sub:'score 30 a 44'},
+      {key:'media',cor:'azul',ico:'fa-chart-line',label:'Média Prioridade',qtd:media.length,valor:media.reduce((s,d)=>s+d.valor,0),sub:'score 10 a 29'},
+      {key:'baixa',cor:'verde',ico:'fa-circle-check',label:'Baixa Prioridade',qtd:baixa.length,valor:baixa.reduce((s,d)=>s+d.valor,0),sub:'score < 10'}
+    ];
+    const el=document.getElementById('painelPrioridadeCards');
+    if(el){ el.innerHTML=cards.map(c=>{
+      const cls=c.cor==='vermelho'?'vermelho':c.cor==='amarelo'?'amarelo':c.cor==='azul'?'azul':'verde';
+      const isActive=window.PAINEL_EXEC_FILTRO===c.key;
+      const activeStyle=isActive?'border-color:var(--azul);box-shadow:0 .35rem .9rem rgba(13,110,253,.18);transform:translateY(-2px);':'';
+      return `<div class="col-12 col-sm-6 col-xl"><div class="priority-card" role="button" tabindex="0" onclick="window.PAINEL_EXEC_FILTRO='${c.key}';renderPainelExecutivo();" onkeydown="if(event.key==='Enter'||event.key===' '){window.PAINEL_EXEC_FILTRO='${c.key}';renderPainelExecutivo();}" style="cursor:pointer;${activeStyle}">
+        <div class="d-flex align-items-center justify-content-between mb-2"><div class="p-icon i-${c.cor}"><i class="fa-solid ${c.ico}"></i></div><span class="badge-soft bg-soft-${cls}">${c.qtd}</span></div>
+        <div class="priority-label" style="${isActive?'color:var(--azul);':''}">${c.label}</div><div class="priority-value">${brlShort(c.valor)}</div><div class="kpi-sub">${c.sub}</div>
+      </div></div>`;
+    }).join(''); }
+
+    const selecionado=listas[window.PAINEL_EXEC_FILTRO];
+    const titulo=document.getElementById('tituloPainelDetalhe');
+    const subtitulo=document.getElementById('subPainelDetalhe');
+    if(titulo) titulo.innerHTML=`<i class="fa-solid fa-list-check text-primary me-2"></i>${selecionado.titulo}`;
+    if(subtitulo) subtitulo.textContent=`${selecionado.sub} • ${selecionado.dados.length} título(s)`;
+
+    const tb=document.getElementById('tblPrioridadeCritica');
+    if(tb){ const lista=[...selecionado.dados].sort((a,b)=>b.score-a.score||b.valor-a.valor||b.dias-a.dias).slice(0,20);
+      tb.innerHTML=lista.length?lista.map(d=>{ const s=statusMap[d.status]; const x=ddPrazo(d); const p=x===null?'—':(x<0?'Vencido':x+' d');
+        const diasCls=d.dias>=90?'text-danger fw-bold':(d.dias>=30?'text-warning fw-semibold':'text-secondary');
+        return `<tr><td><div class="cli-nome">${d.cli}</div><div class="cli-doc">${d.id}</div></td><td class="text-center"><span class="badge-soft ${s.cls}">${s.txt}</span></td><td class="text-center ${diasCls}">${d.dias} d</td><td class="text-center">${p}</td><td class="text-center">${scoreBadge(d.score)}</td><td class="text-end fw-semibold">${brl(d.valor)}</td></tr>`; }).join('')
+      : `<tr><td colspan="6">${emptyState('Nenhum título encontrado nesta prioridade.')}</td></tr>`; }
+    const top=document.getElementById('top5Devedores');
+    if(top){ const grupos=agruparClientes().slice(0,10); const total=DADOS.reduce((s,d)=>s+d.valor,0)||1;
+      top.innerHTML=grupos.length?grupos.map((g,i)=>{ const pct=(g.total/total*100); return `<div class="mb-3"><div class="d-flex justify-content-between"><span class="fw-semibold">${i+1}. ${g.cli.length>26?g.cli.slice(0,24)+'…':g.cli}</span><span>${brlShort(g.total)}</span></div><div class="mini-bar mt-1"><span style="width:${Math.min(pct,100).toFixed(1)}%;background:${i<3?'var(--vermelho)':i<6?'var(--amarelo)':'var(--azul)'}"></span></div><div class="kpi-sub mt-1">${pct.toFixed(1)}% da carteira • ${g.qt} título(s)</div></div>`; }).join('')
+      : emptyState('Nenhum cliente carregado.'); }
+  }
 
 function renderTabela(){ const buscaEl=document.getElementById('busca'); const faixaEl=document.getElementById('filtroFaixa'); if(!buscaEl||!faixaEl) return; const q=norm(buscaEl.value); const f=faixaEl.value;
   const st=document.getElementById('filtroStatusG').value; const vl=document.getElementById('filtroValorG').value; const pz=document.getElementById('filtroPrazoG').value;
