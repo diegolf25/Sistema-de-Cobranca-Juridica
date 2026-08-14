@@ -566,16 +566,14 @@ function renderClientesPct(){ const grupos=agruparClientes(); const totalGeral=g
 function renderPainelExecutivo(){
     const hoje=new Date();
     const ddPrazo=d=>d.prazo?Math.ceil((d.prazo-hoje)/86400000):null;
-    const maxValor=Math.max(...DADOS.map(d=>d.valor||0),1);
-    const maxDias=Math.max(...DADOS.map(d=>d.dias||0),1);
 
     // Nova Inteligência de Priorização
-    // Score 0-100: 50% valor financeiro relativo, 35% atraso relativo, 15% urgência do prazo de notificação.
+    // Score 0-100: 50% Valor Financeiro + 50% Dias de Atraso, ambos por faixas operacionais.
     function scorePrioridade(d){
       const valor=d.valor||0;
       const dias=d.dias||0;
 
-      // 50% Valor Financeiro, ate 50 pontos
+      // 50% Valor Financeiro, até 50 pontos
       let valorScore=0;
       if(valor >= 100000) valorScore=50;
       else if(valor >= 50000) valorScore=40;
@@ -583,7 +581,7 @@ function renderPainelExecutivo(){
       else if(valor >= 10000) valorScore=20;
       else if(valor >= 5000) valorScore=10;
 
-      // 50% Dias de Atraso, ate 50 pontos
+      // 50% Dias de Atraso, até 50 pontos
       let atrasoScore=0;
       if(dias >= 180) atrasoScore=50;
       else if(dias >= 120) atrasoScore=45;
@@ -595,27 +593,53 @@ function renderPainelExecutivo(){
       return Math.min(100, valorScore + atrasoScore);
     }
     function scoreBadge(score){
-      const cls=score>=80?'bg-soft-vermelho':(score>=65?'bg-soft-amarelo':(score>=45?'bg-soft-azul':'bg-soft-cinza'));
+      const cls=score>=45?'bg-soft-vermelho':(score>=30?'bg-soft-amarelo':(score>=10?'bg-soft-azul':'bg-soft-cinza'));
       return `<span class="badge-soft ${cls}">${score}</span>`;
     }
+    function mesVencimento(d){
+      if(!d.venc) return null;
+      return d.venc.getFullYear()+'-'+String(d.venc.getMonth()+1).padStart(2,'0');
+    }
 
+    // Painel Executivo considera somente carteira ainda atacável, sem Ação Judicial.
     const base=DADOS.filter(d=>d.status!=='acao').map(d=>({...d,score:scorePrioridade(d)}));
     const critico=base.filter(d=>d.score>=45);
     const alta=base.filter(d=>d.score>=30&&d.score<45);
     const media=base.filter(d=>d.score>=10&&d.score<30);
     const baixa=base.filter(d=>d.score<10);
 
+    // ALERTA 2 MESES: clientes com títulos em 2 ou mais meses/vencimentos distintos em atraso.
+    const mapaAlerta={};
+    base.forEach(d=>{
+      const mes=mesVencimento(d);
+      if(!mes) return;
+      const chave=(d.doc||'').toString().replace(/\D/g,'') || semAcento(d.cli||'');
+      if(!mapaAlerta[chave]) mapaAlerta[chave]={tipoCliente:true,cli:d.cli||'—',doc:d.doc||'',meses:new Set(),titulos:0,total:0,maxDias:0,maiorScore:0};
+      mapaAlerta[chave].meses.add(mes);
+      mapaAlerta[chave].titulos++;
+      mapaAlerta[chave].total+=d.valor||0;
+      mapaAlerta[chave].maxDias=Math.max(mapaAlerta[chave].maxDias,d.dias||0);
+      mapaAlerta[chave].maiorScore=Math.max(mapaAlerta[chave].maiorScore,d.score||0);
+      if(!mapaAlerta[chave].doc && d.doc) mapaAlerta[chave].doc=d.doc;
+    });
+    const alerta2m=Object.values(mapaAlerta)
+      .filter(c=>c.meses.size>=2)
+      .map(c=>({...c,mesesQt:c.meses.size,valor:c.total,score:c.maiorScore}))
+      .sort((a,b)=>b.mesesQt-a.mesesQt||b.total-a.total||b.maxDias-a.maxDias);
+
     if(!window.PAINEL_EXEC_FILTRO) window.PAINEL_EXEC_FILTRO='critico';
     const listas={
-      critico:{titulo:'Prioridade Crítica',sub:'Score ≥ 45',dados:critico},
-      alta:{titulo:'Alta Prioridade',sub:'Score 30 a 44',dados:alta},
-      media:{titulo:'Média Prioridade',sub:'Score 10 a 29',dados:media},
-      baixa:{titulo:'Baixa Prioridade',sub:'Score abaixo de 10',dados:baixa},
+      critico:{titulo:'Prioridade Crítica',sub:'Score ≥ 45',dados:critico,tipo:'titulo'},
+      alerta2m:{titulo:'ALERTA 2 MESES',sub:'Clientes com NFs em 2 ou mais vencimentos em atraso',dados:alerta2m,tipo:'cliente'},
+      alta:{titulo:'Alta Prioridade',sub:'Score 30 a 44',dados:alta,tipo:'titulo'},
+      media:{titulo:'Média Prioridade',sub:'Score 10 a 29',dados:media,tipo:'titulo'},
+      baixa:{titulo:'Baixa Prioridade',sub:'Score abaixo de 10',dados:baixa,tipo:'titulo'}
     };
     if(!listas[window.PAINEL_EXEC_FILTRO]) window.PAINEL_EXEC_FILTRO='critico';
 
     const cards=[
       {key:'critico',cor:'vermelho',ico:'fa-triangle-exclamation',label:'Prioridade Crítica',qtd:critico.length,valor:critico.reduce((s,d)=>s+d.valor,0),sub:'score ≥ 45'},
+      {key:'alerta2m',cor:'vermelho',ico:'fa-bell',label:'ALERTA 2 MESES',qtd:alerta2m.length,valor:alerta2m.reduce((s,d)=>s+d.total,0),sub:'clientes com 2+ vencimentos'},
       {key:'alta',cor:'amarelo',ico:'fa-fire',label:'Alta Prioridade',qtd:alta.length,valor:alta.reduce((s,d)=>s+d.valor,0),sub:'score 30 a 44'},
       {key:'media',cor:'azul',ico:'fa-chart-line',label:'Média Prioridade',qtd:media.length,valor:media.reduce((s,d)=>s+d.valor,0),sub:'score 10 a 29'},
       {key:'baixa',cor:'verde',ico:'fa-circle-check',label:'Baixa Prioridade',qtd:baixa.length,valor:baixa.reduce((s,d)=>s+d.valor,0),sub:'score < 10'}
@@ -635,14 +659,22 @@ function renderPainelExecutivo(){
     const titulo=document.getElementById('tituloPainelDetalhe');
     const subtitulo=document.getElementById('subPainelDetalhe');
     if(titulo) titulo.innerHTML=`<i class="fa-solid fa-list-check text-primary me-2"></i>${selecionado.titulo}`;
-    if(subtitulo) subtitulo.textContent=`${selecionado.sub} • ${selecionado.dados.length} título(s)`;
+    if(subtitulo) subtitulo.textContent=`${selecionado.sub} • ${selecionado.dados.length} registro(s)`;
 
     const tb=document.getElementById('tblPrioridadeCritica');
-    if(tb){ const lista=[...selecionado.dados].sort((a,b)=>b.score-a.score||b.valor-a.valor||b.dias-a.dias).slice(0,20);
-      tb.innerHTML=lista.length?lista.map(d=>{ const s=statusMap[d.status]; const x=ddPrazo(d); const p=x===null?'—':(x<0?'Vencido':x+' d');
-        const diasCls=d.dias>=90?'text-danger fw-bold':(d.dias>=30?'text-warning fw-semibold':'text-secondary');
-        return `<tr><td><div class="cli-nome">${d.cli}</div><div class="cli-doc">${d.id}</div></td><td class="text-center"><span class="badge-soft ${s.cls}">${s.txt}</span></td><td class="text-center ${diasCls}">${d.dias} d</td><td class="text-center">${p}</td><td class="text-center">${scoreBadge(d.score)}</td><td class="text-end fw-semibold">${brl(d.valor)}</td></tr>`; }).join('')
-      : `<tr><td colspan="6">${emptyState('Nenhum título encontrado nesta prioridade.')}</td></tr>`; }
+    if(tb){
+      if(selecionado.tipo==='cliente'){
+        const lista=[...selecionado.dados].slice(0,20);
+        tb.innerHTML=lista.length?lista.map(c=>`<tr><td><div class="cli-nome">${c.cli}</div><div class="cli-doc">${c.doc||''}</div></td><td class="text-center"><span class="badge-soft bg-soft-vermelho">2+ vencimentos</span></td><td class="text-center text-danger fw-bold">${c.maxDias} d</td><td class="text-center">${c.mesesQt} mês(es) • ${c.titulos} NF(s)</td><td class="text-center">${scoreBadge(c.score)}</td><td class="text-end fw-semibold">${brl(c.total)}</td></tr>`).join('')
+        : `<tr><td colspan="6">${emptyState('Nenhum cliente com NFs em dois vencimentos em atraso.')}</td></tr>`;
+      } else {
+        const lista=[...selecionado.dados].sort((a,b)=>b.score-a.score||b.valor-a.valor||b.dias-a.dias).slice(0,20);
+        tb.innerHTML=lista.length?lista.map(d=>{ const s=statusMap[d.status]; const x=ddPrazo(d); const p=x===null?'—':(x<0?'Vencido':x+' d');
+          const diasCls=d.dias>=90?'text-danger fw-bold':(d.dias>=30?'text-warning fw-semibold':'text-secondary');
+          return `<tr><td><div class="cli-nome">${d.cli}</div><div class="cli-doc">${d.id}</div></td><td class="text-center"><span class="badge-soft ${s.cls}">${s.txt}</span></td><td class="text-center ${diasCls}">${d.dias} d</td><td class="text-center">${p}</td><td class="text-center">${scoreBadge(d.score)}</td><td class="text-end fw-semibold">${brl(d.valor)}</td></tr>`; }).join('')
+        : `<tr><td colspan="6">${emptyState('Nenhum título encontrado nesta prioridade.')}</td></tr>`;
+      }
+    }
     const top=document.getElementById('top5Devedores');
     if(top){ const grupos=agruparClientes().slice(0,10); const total=DADOS.reduce((s,d)=>s+d.valor,0)||1;
       top.innerHTML=grupos.length?grupos.map((g,i)=>{ const pct=(g.total/total*100); return `<div class="mb-3"><div class="d-flex justify-content-between"><span class="fw-semibold">${i+1}. ${g.cli.length>26?g.cli.slice(0,24)+'…':g.cli}</span><span>${brlShort(g.total)}</span></div><div class="mini-bar mt-1"><span style="width:${Math.min(pct,100).toFixed(1)}%;background:${i<3?'var(--vermelho)':i<6?'var(--amarelo)':'var(--azul)'}"></span></div><div class="kpi-sub mt-1">${pct.toFixed(1)}% da carteira • ${g.qt} título(s)</div></div>`; }).join('')
