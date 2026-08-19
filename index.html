@@ -60,7 +60,37 @@ function abrirTab(tab){document.querySelectorAll('.tab-section').forEach(s=>s.cl
 document.querySelectorAll('.nav-link[data-tab]').forEach(a=>a.addEventListener('click',()=>abrirTab(a.dataset.tab)));document.addEventListener('input',e=>{if(e.target.id==='buscaT')renderTitulos();if(e.target.id==='buscaC')renderClientes()});document.addEventListener('change',e=>{if(['ordenarT','filtroStatusT','filtroPrazoT'].includes(e.target.id))renderTitulos();if(e.target.id==='filtroPrazo')renderPrazos();if(e.target.classList.contains('status-select'))setStatus(e.target.dataset.id,e.target.value)});
 function imprimirAba(){const ativa=document.querySelector('.tab-section.active');document.getElementById('phMeta').textContent='Base: '+FONTE_ATUAL+' • Emitido em '+new Date().toLocaleString('pt-BR');document.getElementById('phTitle').textContent=document.querySelector('.topbar h1').textContent;document.getElementById('phSub').textContent='Kroma Energia - Sistema de Cobrança Jurídica';const old=document.title;document.title='Kroma_'+document.getElementById('phTitle').textContent.replace(/[^\w]+/g,'_');window.print();setTimeout(()=>{document.title=old},400)}
 document.getElementById('fileInput').addEventListener('change',e=>{if(e.target.files[0])lerArquivo(e.target.files[0])});const dz=document.getElementById('dropzone');['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>{if(e.dataTransfer.files[0])lerArquivo(e.dataTransfer.files[0])});
-(function(){if(restaurarBase())return;carregarDemo()})();
+/* ==== AUTO-CARGA DA BASE PUBLICADA NO GITHUB (funciona em qualquer computador) ==== */
+/* Nome/caminho do arquivo da base que fica publicado no MESMO repositório do index.html.
+   Se você renomear o arquivo no GitHub, ajuste apenas esta linha. */
+const BASE_REMOTA_PADRAO='base_cobranca.xlsx';
+function getBaseRemotaNome(){try{return localStorage.getItem('kroma_base_arquivo')||BASE_REMOTA_PADRAO}catch(e){return BASE_REMOTA_PADRAO}}
+function setBaseRemotaNome(n){try{localStorage.setItem('kroma_base_arquivo',n)}catch(e){}}
+async function carregarBaseRemota(){
+  const nome=getBaseRemotaNome();
+  const dz=document.getElementById('dzStatus');
+  try{
+    if(dz)dz.innerHTML='<span class="text-primary"><i class="fa-solid fa-cloud-arrow-down me-1"></i>Carregando base publicada...</span>';
+    // ?v=timestamp evita cache: sempre pega a última base commitada no GitHub
+    const resp=await fetch(nome+'?v='+Date.now(),{cache:'no-store'});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const buf=await resp.arrayBuffer();
+    const wb=XLSX.read(new Uint8Array(buf),{type:'array',cellDates:false});
+    processarWorkbook(wb,nome);
+    setBaseRemotaNome(nome);
+    if(dz)dz.innerHTML=`<span class="text-success"><i class="fa-solid fa-cloud-check me-1"></i>Base publicada carregada</span>: ${DADOS.length} títulos • <span class="text-secondary">${nome}</span>`;
+    return true;
+  }catch(e){return false;}
+}
+/* Sequência de inicialização:
+   1) tenta a base publicada no repositório (mesma para todos os computadores);
+   2) se falhar (ex.: aberto como arquivo local file://), usa a base salva no navegador;
+   3) por fim, carrega o exemplo. */
+(async function(){
+  if(await carregarBaseRemota())return;
+  if(restaurarBase())return;
+  carregarDemo();
+})();
 </script>
 </body>
 </html>
