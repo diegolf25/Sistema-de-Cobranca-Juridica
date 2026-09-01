@@ -53,13 +53,13 @@
     </div>
     <div class="card-body p-0">
       <div class="table-responsive"><table class="table table-hover align-middle mb-0 enc-table"><thead><tr>
-        <th class="ps-3"><input type="checkbox" id="encCheckAll"></th><th>Cliente</th><th>Título</th><th class="text-center">NF</th><th class="text-center">Vencimento</th><th class="text-end">Saldo base</th><th class="text-center">Data pagamento</th><th class="text-center">Dias atraso</th><th class="text-end">Juros</th><th class="text-end">Multa</th><th class="text-end">Encargos</th><th class="text-center">Situação</th>
-      </tr></thead><tbody id="encBody"><tr><td colspan="12" class="enc-empty">Carregue a base de títulos para iniciar.</td></tr></tbody></table></div>
+        <th class="ps-3"><input type="checkbox" id="encCheckAll"></th><th>Cliente</th><th>Título</th><th class="text-center">NF</th><th class="text-center">Vencimento</th><th class="text-end">Saldo base</th><th class="text-center">Data pagamento</th><th class="text-center">Dias atraso</th><th class="text-end">Juros</th><th class="text-end">Multa</th><th class="text-end">Encargos</th><th class="text-center">Situação</th><th class="text-center">Ações</th>
+      </tr></thead><tbody id="encBody"><tr><td colspan="13" class="enc-empty">Carregue a base de títulos para iniciar.</td></tr></tbody></table></div>
     </div>
   </div>
   <div class="enc-sticky" id="encActionWrap" style="display:none"><div class="enc-actionbar d-flex justify-content-between align-items-center gap-3 flex-wrap">
     <div><div class="small text-white-50">Cobrança selecionada</div><div class="fw-bold"><span id="encSelCount">0</span> título(s) • encargos: <span id="encSelValor">R$ 0,00</span></div></div>
-    <div class="d-flex gap-2 flex-wrap"><button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#encDateModal"><i class="fa-solid fa-calendar-day me-1"></i> Aplicar data</button><button class="btn btn-light btn-sm" onclick="encGerarPDFs()"><i class="fa-solid fa-file-pdf text-danger me-1"></i> Gerar PDF(s)</button></div>
+    <div class="d-flex gap-2 flex-wrap"><button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#encDateModal"><i class="fa-solid fa-calendar-day me-1"></i> Aplicar data</button><button class="btn btn-light btn-sm" onclick="encGerarPDFs()"><i class="fa-solid fa-file-pdf text-danger me-1"></i> Gerar PDF(s)</button><button class="btn btn-success btn-sm" id="encGmailBulkBtn" onclick="encCriarRascunhosSelecionados()"><i class="fa-brands fa-google me-1"></i> Criar rascunho Gmail</button></div>
   </div></div>
 </section>
 <section id="tab-cobranca" class="tab-section">
@@ -509,8 +509,8 @@ function encIso(d){if(!d)return'';const z=encDateOnly(d);return z?`${z.getFullYe
 function encCalc(d){const id=encId(d),p=encDateOnly(ENC_PAG[id]);const venc=encDateOnly(d.venc);let dias=0;if(p&&venc)dias=Math.max(0,Math.round((p-venc)/86400000));const principal=Math.max(0,Number(d.valor)||0);const juros=p&&dias>0?principal*(Number(ENC_CFG.juros)||0)/100*(dias/(Number(ENC_CFG.base)||30)):0;const multa=p&&dias>0?principal*(Number(ENC_CFG.multa)||0)/100:0;return{p,dias,principal,juros,multa,total:juros+multa}}
 function encStatus(c){if(!c.p)return'<span class="enc-status bg-soft-cinza">Aguardando data</span>';if(c.dias<=0)return'<span class="enc-status bg-soft-verde">Sem atraso</span>';return'<span class="enc-status bg-soft-amarelo">Pago com atraso</span>'}
 function encLista(){const q=norm(document.getElementById('encBusca')?.value||''),f=document.getElementById('encFiltro')?.value||'todos';return DADOS.filter(d=>(d.valor||0)>0).filter(d=>{const id=encId(d),has=!!ENC_PAG[id];if(q&&!norm(d.cli).includes(q)&&!norm(d.doc).includes(q)&&!norm(id).includes(q)&&!norm(numeroNFDocumento(d)).includes(q))return false;if(f==='comdata'&&!has)return false;if(f==='semdata'&&has)return false;if(f==='selecionados'&&!ENC_SEL.has(id))return false;return true})}
-function encRender(){const body=document.getElementById('encBody');if(!body)return;const lista=encLista();body.innerHTML=lista.length?lista.map(d=>{const id=encId(d),c=encCalc(d);return`<tr data-eid="${escAttr(id)}"><td class="ps-3"><input type="checkbox" class="enc-check" ${ENC_SEL.has(id)?'checked':''}></td><td class="enc-client"><div class="cli-nome">${d.cli||'-'}</div><div class="cli-doc">${d.doc||''}</div></td><td><span class="fw-semibold text-primary">${d.titulo||d.id.replace(/^TIT-/,'')}</span></td><td class="text-center fw-semibold">${nfVisualNumero(d)}</td><td class="text-center">${fmtData(d.venc)}</td><td class="enc-money fw-semibold">${brl(c.principal)}</td><td class="text-center"><input type="date" class="form-control form-control-sm enc-date" value="${encIso(c.p)}" style="min-width:145px"></td><td class="text-center ${c.dias>=30?'text-danger fw-bold':''}">${c.p?c.dias:'-'}</td><td class="enc-money">${brl(c.juros)}</td><td class="enc-money">${brl(c.multa)}</td><td class="enc-money fw-bold">${brl(c.total)}</td><td class="text-center">${encStatus(c)}</td></tr>`}).join(''):`<tr><td colspan="12" class="enc-empty">Nenhum título encontrado.</td></tr>`;
-body.querySelectorAll('tr[data-eid]').forEach(tr=>{const id=tr.dataset.eid;tr.querySelector('.enc-check').addEventListener('change',e=>{e.target.checked?ENC_SEL.add(id):ENC_SEL.delete(id);encAtualizaResumo();encSyncAll()});tr.querySelector('.enc-date').addEventListener('change',e=>{ENC_PAG[id]=e.target.value||'';encRender()})});encAtualizaResumo();encSyncAll()}
+function encRender(){const body=document.getElementById('encBody');if(!body)return;const lista=encLista();body.innerHTML=lista.length?lista.map(d=>{const id=encId(d),c=encCalc(d);return`<tr data-eid="${escAttr(id)}"><td class="ps-3"><input type="checkbox" class="enc-check" ${ENC_SEL.has(id)?'checked':''}></td><td class="enc-client"><div class="cli-nome">${d.cli||'-'}</div><div class="cli-doc">${d.doc||''}</div></td><td><span class="fw-semibold text-primary">${d.titulo||d.id.replace(/^TIT-/,'')}</span></td><td class="text-center fw-semibold">${nfVisualNumero(d)}</td><td class="text-center">${fmtData(d.venc)}</td><td class="enc-money fw-semibold">${brl(c.principal)}</td><td class="text-center"><input type="date" class="form-control form-control-sm enc-date" value="${encIso(c.p)}" style="min-width:145px"></td><td class="text-center ${c.dias>=30?'text-danger fw-bold':''}">${c.p?c.dias:'-'}</td><td class="enc-money">${brl(c.juros)}</td><td class="enc-money">${brl(c.multa)}</td><td class="enc-money fw-bold">${brl(c.total)}</td><td class="text-center">${encStatus(c)}</td><td class="text-center"><button type="button" class="btn btn-outline-success btn-sm enc-gmail-one" title="Criar rascunho no Gmail com o título de encargos"><i class="fa-brands fa-google"></i></button></td></tr>`}).join(''):`<tr><td colspan="13" class="enc-empty">Nenhum título encontrado.</td></tr>`;
+body.querySelectorAll('tr[data-eid]').forEach(tr=>{const id=tr.dataset.eid;tr.querySelector('.enc-check').addEventListener('change',e=>{e.target.checked?ENC_SEL.add(id):ENC_SEL.delete(id);encAtualizaResumo();encSyncAll()});tr.querySelector('.enc-date').addEventListener('change',e=>{ENC_PAG[id]=e.target.value||'';encRender()});tr.querySelector('.enc-gmail-one')?.addEventListener('click',()=>encCriarRascunhoIndividual(id))});encAtualizaResumo();encSyncAll()}
 function encSyncAll(){const cb=document.getElementById('encCheckAll');if(!cb)return;const ids=encLista().map(encId);cb.checked=ids.length>0&&ids.every(id=>ENC_SEL.has(id));cb.indeterminate=ids.some(id=>ENC_SEL.has(id))&&!cb.checked}
 function encAtualizaResumo(){const disp=DADOS.filter(d=>(d.valor||0)>0),sel=disp.filter(d=>ENC_SEL.has(encId(d)));const encargos=disp.reduce((s,d)=>s+encCalc(d).total,0),selV=sel.reduce((s,d)=>s+encCalc(d).total,0);const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v};set('encKpiTitulos',disp.length);set('encKpiSaldo',brl(disp.reduce((s,d)=>s+(Number(d.valor)||0),0)));set('encKpiEncargos',brl(encargos));set('encKpiSel',sel.length);set('encSelCount',sel.length);set('encSelValor',brl(selV));const wrap=document.getElementById('encActionWrap');if(wrap)wrap.style.display=sel.length?'block':'none'}
 function encCarregaConfigUI(){const m={encCfgJuros:'juros',encCfgBase:'base',encCfgMulta:'multa',encCfgPrazo:'prazo',encCfgEmpresa:'empresa',encCfgCnpj:'cnpj',encCfgBanco:'banco',encCfgAgencia:'agencia',encCfgConta:'conta',encCfgTexto:'texto'};Object.entries(m).forEach(([id,k])=>{const e=document.getElementById(id);if(e)e.value=ENC_CFG[k]})}
@@ -523,7 +523,7 @@ function encAplicarTimbrado(doc){doc.addImage(KROMA_TIMBRADO,'PNG',0,0,210,297);
 function encSan(s){return (s||'cliente').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,60)||'cliente'}
 function encAgrupaSelecionados(){const map=new Map();DADOS.filter(d=>ENC_SEL.has(encId(d))).forEach(d=>{const k=(d.doc||'')+'__'+(d.cli||'');if(!map.has(k))map.set(k,[]);map.get(k).push(d)});return [...map.values()]}
 function encGerarPDFs(){if(!window.jspdf){alert('Biblioteca de PDF não carregada. Verifique a conexão com a internet.');return}if(!ENC_CFG.empresa||!ENC_CFG.cnpj||!ENC_CFG.banco||!ENC_CFG.agencia||!ENC_CFG.conta){alert('Preencha os dados de '+empresaCfg().nome+' em Configurações antes de gerar o PDF de encargos.');return}const sel=DADOS.filter(d=>ENC_SEL.has(encId(d)));if(!sel.length){alert('Selecione ao menos um título.');return}const semData=sel.filter(d=>!ENC_PAG[encId(d)]);if(semData.length){alert('Informe a data de pagamento de todos os títulos selecionados.');return}const semAtraso=sel.filter(d=>encCalc(d).dias<=0);if(semAtraso.length){alert('Há título(s) sem atraso. Revise a data de pagamento antes de gerar a cobrança.');return}encAgrupaSelecionados().forEach((g,i)=>encPDFGrupo(g,i+1))}
-function encPDFGrupo(grupo,idx){
+function encPDFGrupo(grupo,idx,opts={download:true}){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'mm',format:'a4'});
   const emissao=new Date(),vcto=encAddDays(emissao,ENC_CFG.prazo),cli=grupo[0];
@@ -608,7 +608,76 @@ function encPDFGrupo(grupo,idx){
   doc.text(ENC_CFG.empresa,14,y+6);
   doc.text(`CNPJ / PIX: ${ENC_CFG.cnpj}`,14,y+11.5);
   doc.text(`${ENC_CFG.banco} | Agência: ${ENC_CFG.agencia} | Conta Corrente: ${ENC_CFG.conta}`,14,y+17);
-  doc.save(`cobranca_encargos_${encSan(cli.cli)}_${no}.pdf`)
+  const nome=`cobranca_encargos_${encSan(cli.cli)}_${no}.pdf`;
+  const blob=doc.output('blob');
+  if(opts.download!==false)doc.save(nome);
+  return{blob,nome,no,emissao,vcto,cliente:cli,total,totalJ,totalM,grupo};
+}
+
+
+function encValidarGrupo(grupo){
+  if(!window.jspdf)return'Biblioteca de PDF não carregada.';
+  if(!ENC_CFG.empresa||!ENC_CFG.cnpj||!ENC_CFG.banco||!ENC_CFG.agencia||!ENC_CFG.conta)return'Preencha os dados da empresa em Configurações antes de gerar o título.';
+  const semData=grupo.filter(d=>!ENC_PAG[encId(d)]);if(semData.length)return'Informe a data de pagamento de todos os títulos.';
+  const semAtraso=grupo.filter(d=>encCalc(d).dias<=0);if(semAtraso.length)return'Há título(s) sem atraso. Revise a data de pagamento.';
+  const cli=grupo[0]||{};const contato=cobContatoCliente(cli.doc,cli.cli);if(!contato||!contato.para||!contato.para.length)return'Cliente sem e-mail de cobrança na base IOSYS.';
+  return'';
+}
+function encGrupoPorId(id){const d=DADOS.find(x=>encId(x)===id);return d?[d]:[]}
+function encDadosEmail(info,contato){
+  const cli=info.cliente||{};
+  const titulos=(info.grupo||[]).map(d=>d.titulo||d.id?.replace(/^TIT-/,'')).filter(Boolean).join(', ');
+  const body=[
+    'Prezados,',
+    '',
+    'Segue anexa a cobrança dos encargos financeiros referentes ao(s) título(s) pago(s) em atraso'+(titulos?': '+titulos+'.':'.'),
+    '',
+    'Valor total dos encargos: '+brl(info.total),
+    'Vencimento da cobrança: '+fmtData(info.vcto),
+    '',
+    'Solicitamos, por gentileza, a programação do pagamento conforme demonstrativo anexo.',
+    '',
+    'Atenciosamente,',
+    'Financeiro Kroma'
+  ].join('\n');
+  return{to:(contato.para||[]).join(', '),cc:(contato.cc||[]).join(', '),subject:`Cobrança de Encargos Financeiros | ${cli.cli||'Cliente'} | ${empresaCfg().nome}`,body};
+}
+function encHistoricoRascunho(info){
+  const cli=info.cliente||{};const g={key:'ENC__'+(cli.doc||'')+'__'+(cli.cli||''),cli:cli.cli||'-',doc:cli.doc||'',total:info.total,titulos:info.grupo||[]};
+  cobHistoricoAdd(g,'Rascunho de encargos criado');
+}
+async function encCriarRascunhoGrupo(grupo,idx=1){
+  const erro=encValidarGrupo(grupo);if(erro)throw new Error(erro);
+  if(!NF_GMAIL_TOKEN)throw new Error('Gmail não conectado. Clique em Conectar Gmail na Central de NFs e autorize gmail.compose.');
+  const cli=grupo[0],contato=cobContatoCliente(cli.doc,cli.cli);
+  const info=encPDFGrupo(grupo,idx,{download:false});
+  const dados=encDadosEmail(info,contato);
+  const raw=await cobMontarMimeComAnexos(dados,[{nome:info.nome,blob:info.blob,nf:'ENC'}]);
+  const draft=await cobCriarDraftGmail(raw);
+  encHistoricoRascunho(info);
+  return{draft,info,dados};
+}
+async function encCriarRascunhoIndividual(id){
+  const grupo=encGrupoPorId(id);if(!grupo.length)return;
+  try{
+    await encCriarRascunhoGrupo(grupo,1);
+    window.open('https://mail.google.com/mail/#drafts','_blank','noopener');
+    alert('Rascunho criado no Gmail com o PDF da cobrança de encargos anexado. Revise antes de enviar.');
+  }catch(e){console.error(e);if(!NF_GMAIL_TOKEN&&String(e.message||e).includes('Gmail não conectado'))nfGmailConectar();alert(e.message||e)}
+}
+async function encCriarRascunhosSelecionados(){
+  const grupos=encAgrupaSelecionados();if(!grupos.length){alert('Selecione ao menos um título.');return}
+  if(!NF_GMAIL_TOKEN){nfGmailConectar();alert('Conecte o Gmail e autorize a criação de rascunhos. Depois clique novamente em “Criar rascunho Gmail”.');return}
+  const btn=document.getElementById('encGmailBulkBtn');const original=btn?btn.innerHTML:'';if(btn)btn.disabled=true;
+  let ok=0;const falhas=[];
+  try{
+    for(let i=0;i<grupos.length;i++){
+      if(btn)btn.innerHTML=`<span class="spinner-border spinner-border-sm me-1"></span> Criando ${i+1}/${grupos.length}...`;
+      try{await encCriarRascunhoGrupo(grupos[i],i+1);ok++}catch(e){falhas.push((grupos[i][0]?.cli||'Cliente')+': '+(e.message||e))}
+    }
+    if(ok)window.open('https://mail.google.com/mail/#drafts','_blank','noopener');
+    let msg=`${ok} de ${grupos.length} rascunho(s) de encargos criado(s) no Gmail.`;if(falhas.length)msg+='\n\nNão criados:\n- '+falhas.join('\n- ');msg+='\n\nRevise os rascunhos antes do envio.';alert(msg);
+  }finally{if(btn){btn.disabled=false;btn.innerHTML=original||'<i class="fa-brands fa-google me-1"></i> Criar rascunho Gmail'}}
 }
 document.addEventListener('input',e=>{if(e.target.id==='encBusca')encRender()});document.addEventListener('change',e=>{if(e.target.id==='encFiltro')encRender();if(e.target.id==='encCheckAll'){encLista().forEach(d=>e.target.checked?ENC_SEL.add(encId(d)):ENC_SEL.delete(encId(d)));encRender()}});document.getElementById('encConfigModal')?.addEventListener('show.bs.modal',encCarregaConfigUI);
 document.getElementById('empresaSelect')?.addEventListener('change',e=>trocarEmpresa(e.target.value));
