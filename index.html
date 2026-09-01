@@ -522,7 +522,7 @@ const KROMA_TIMBRADO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABdEAAAg5CAIA
 function encAplicarTimbrado(doc){doc.addImage(KROMA_TIMBRADO,'PNG',0,0,210,297);}
 function encSan(s){return (s||'cliente').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,60)||'cliente'}
 function encAgrupaSelecionados(){const map=new Map();DADOS.filter(d=>ENC_SEL.has(encId(d))).forEach(d=>{const k=(d.doc||'')+'__'+(d.cli||'');if(!map.has(k))map.set(k,[]);map.get(k).push(d)});return [...map.values()]}
-function encGerarPDFs(){if(!window.jspdf){alert('Biblioteca de PDF não carregada. Verifique a conexão com a internet.');return}if(!ENC_CFG.empresa||!ENC_CFG.cnpj||!ENC_CFG.banco||!ENC_CFG.agencia||!ENC_CFG.conta){alert('Preencha os dados de '+empresaCfg().nome+' em Configurações antes de gerar o PDF de encargos.');return}const sel=DADOS.filter(d=>ENC_SEL.has(encId(d)));if(!sel.length){alert('Selecione ao menos um título.');return}const semData=sel.filter(d=>!ENC_PAG[encId(d)]);if(semData.length){alert('Informe a data de pagamento de todos os títulos selecionados.');return}const semAtraso=sel.filter(d=>encCalc(d).dias<=0);if(semAtraso.length){alert('Há título(s) sem atraso. Revise a data de pagamento antes de gerar a cobrança.');return}encAgrupaSelecionados().forEach((g,i)=>encPDFGrupo(g,i+1))}
+function encGerarPDFs(){if(!window.jspdf){alert('Biblioteca de PDF não carregada. Verifique a conexão com a internet.');return}if(!ENC_CFG.empresa||!ENC_CFG.cnpj||!ENC_CFG.banco||!ENC_CFG.agencia||!ENC_CFG.conta){alert('Preencha os dados de '+empresaCfg().nome+' em Configurações antes de gerar o PDF de encargos.');return}const sel=DADOS.filter(d=>ENC_SEL.has(encId(d)));if(!sel.length){alert('Selecione ao menos uma NF.');return}const semData=sel.filter(d=>!ENC_PAG[encId(d)]);if(semData.length){alert('Informe a data de pagamento de todas as NFs selecionadas.');return}const semAtraso=sel.filter(d=>encCalc(d).dias<=0);if(semAtraso.length){alert('Há NF(s) sem atraso. Revise a data de pagamento antes de gerar a cobrança.');return}encAgrupaSelecionados().forEach((g,i)=>encPDFGrupo(g,i+1))}
 function encPDFGrupo(grupo,idx,opts={download:true}){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'mm',format:'a4'});
@@ -565,8 +565,8 @@ function encPDFGrupo(grupo,idx,opts={download:true}){
   y+=intro.length*4.6+4;
   doc.autoTable({
     startY:y,
-    head:[['Título','Vencimento','Pagamento','Dias','Saldo base','Juros','Multa','Encargos']],
-    body:calc.map(x=>[x.d.titulo||x.d.id.replace(/^TIT-/,''),fmtData(x.d.venc),fmtData(x.c.p),String(x.c.dias),brl(x.c.principal),brl(x.c.juros),brl(x.c.multa),brl(x.c.total)]),
+    head:[['NF','Vencimento','Pagamento','Dias','Saldo base','Juros','Multa','Encargos']],
+    body:calc.map(x=>[nfVisualNumero(x.d)||'-',fmtData(x.d.venc),fmtData(x.c.p),String(x.c.dias),brl(x.c.principal),brl(x.c.juros),brl(x.c.multa),brl(x.c.total)]),
     theme:'grid',
     styles:{fontSize:7.1,cellPadding:1.8,valign:'middle',lineColor:[222,226,230],lineWidth:.15,textColor:[33,37,41]},
     headStyles:{fillColor:[225,91,37],textColor:255,fontStyle:'bold'},
@@ -582,7 +582,7 @@ function encPDFGrupo(grupo,idx,opts={download:true}){
   doc.setFont('helvetica','normal');
   doc.setFontSize(9);
   doc.text(`Juros: ${String(ENC_CFG.juros).replace('.',',')}% ao mês, pro rata die, base ${ENC_CFG.base} dias.`,14,y+6);
-  doc.text(`Multa: ${String(ENC_CFG.multa).replace('.',',')}% fixa sobre o saldo do título.`,14,y+11.5);
+  doc.text(`Multa: ${String(ENC_CFG.multa).replace('.',',')}% fixa sobre o saldo da NF.`,14,y+11.5);
   y+=18;
   doc.setFillColor(248,249,250);
   doc.setDrawColor(230,232,235);
@@ -617,20 +617,20 @@ function encPDFGrupo(grupo,idx,opts={download:true}){
 
 function encValidarGrupo(grupo){
   if(!window.jspdf)return'Biblioteca de PDF não carregada.';
-  if(!ENC_CFG.empresa||!ENC_CFG.cnpj||!ENC_CFG.banco||!ENC_CFG.agencia||!ENC_CFG.conta)return'Preencha os dados da empresa em Configurações antes de gerar o título.';
-  const semData=grupo.filter(d=>!ENC_PAG[encId(d)]);if(semData.length)return'Informe a data de pagamento de todos os títulos.';
-  const semAtraso=grupo.filter(d=>encCalc(d).dias<=0);if(semAtraso.length)return'Há título(s) sem atraso. Revise a data de pagamento.';
+  if(!ENC_CFG.empresa||!ENC_CFG.cnpj||!ENC_CFG.banco||!ENC_CFG.agencia||!ENC_CFG.conta)return'Preencha os dados da empresa em Configurações antes de gerar a cobrança de encargos.';
+  const semData=grupo.filter(d=>!ENC_PAG[encId(d)]);if(semData.length)return'Informe a data de pagamento de todas as NFs.';
+  const semAtraso=grupo.filter(d=>encCalc(d).dias<=0);if(semAtraso.length)return'Há NF(s) sem atraso. Revise a data de pagamento.';
   const cli=grupo[0]||{};const contato=cobContatoCliente(cli.doc,cli.cli);if(!contato||!contato.para||!contato.para.length)return'Cliente sem e-mail de cobrança na base IOSYS.';
   return'';
 }
 function encGrupoPorId(id){const d=DADOS.find(x=>encId(x)===id);return d?[d]:[]}
 function encDadosEmail(info,contato){
   const cli=info.cliente||{};
-  const titulos=(info.grupo||[]).map(d=>d.titulo||d.id?.replace(/^TIT-/,'')).filter(Boolean).join(', ');
+  const nfs=(info.grupo||[]).map(d=>nfVisualNumero(d)).filter(Boolean).join(', ');
   const body=[
     'Prezados,',
     '',
-    'Segue anexa a cobrança dos encargos financeiros referentes ao(s) título(s) pago(s) em atraso'+(titulos?': '+titulos+'.':'.'),
+    'Segue anexa a cobrança dos encargos financeiros referentes à(s) NF(s) paga(s) em atraso'+(nfs?': '+nfs+'.':'.'),
     '',
     'Valor total dos encargos: '+brl(info.total),
     'Vencimento da cobrança: '+fmtData(info.vcto),
@@ -666,7 +666,7 @@ async function encCriarRascunhoIndividual(id){
   }catch(e){console.error(e);if(!NF_GMAIL_TOKEN&&String(e.message||e).includes('Gmail não conectado'))nfGmailConectar();alert(e.message||e)}
 }
 async function encCriarRascunhosSelecionados(){
-  const grupos=encAgrupaSelecionados();if(!grupos.length){alert('Selecione ao menos um título.');return}
+  const grupos=encAgrupaSelecionados();if(!grupos.length){alert('Selecione ao menos uma NF.');return}
   if(!NF_GMAIL_TOKEN){nfGmailConectar();alert('Conecte o Gmail e autorize a criação de rascunhos. Depois clique novamente em “Criar rascunho Gmail”.');return}
   const btn=document.getElementById('encGmailBulkBtn');const original=btn?btn.innerHTML:'';if(btn)btn.disabled=true;
   let ok=0;const falhas=[];
