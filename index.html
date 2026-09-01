@@ -69,7 +69,7 @@
 </div><div id="cobImportDiag" class="cob-help mt-2"></div></div>
 <div class="card card-panel shadow-sm mb-3"><div class="card-header"><div><span><i class="fa-solid fa-envelopes-bulk text-success me-2"></i>Fila Consolidada por Cliente</span><div class="sub mt-1">Um único e-mail por CNPJ, reunindo todos os títulos aptos para cobrança.</div></div><div class="cob-toolbar"><input type="text" id="cobBusca" class="form-control form-control-sm" placeholder="Buscar cliente, CNPJ ou e-mail" style="width:220px"><select id="cobFiltro" class="form-select form-select-sm" style="width:185px"><option value="todos">Todos</option><option value="prontos">Prontos para cobrar</option><option value="sememail">Sem e-mail</option><option value="bloqueados">Bloqueados</option><option value="rascunho">Rascunho preparado</option><option value="cobrados">Cobrança registrada</option></select></div></div>
 <div class="card-body p-0"><div class="table-responsive"><table class="table table-hover align-middle mb-0 cob-table"><thead><tr><th class="ps-3"><input type="checkbox" id="cobCheckAll" title="Selecionar todos os aptos"></th><th>Cliente</th><th class="text-center">Títulos</th><th class="text-center">Maior atraso</th><th class="text-end">Total</th><th class="text-center">NFs</th><th>Destinatários</th><th class="text-center">Situação</th><th class="text-center">Ações</th></tr></thead><tbody id="cobBody"><tr><td colspan="9" class="empty-state">Carregue o Aging List para montar a fila de cobrança.</td></tr></tbody></table></div></div><div class="card-header border-top text-muted" style="border-bottom:none"><span class="sub" id="cobInfo">-</span><span class="sub">Judicial e Acordo Comercial são bloqueados automaticamente.</span></div></div>
-<div class="cob-sticky mb-3" id="cobActionWrap" style="display:none"><div class="cob-actionbar d-flex justify-content-between align-items-center gap-3 flex-wrap"><div><div class="small text-white-50">Clientes selecionados</div><div class="fw-bold"><span id="cobSelCount">0</span> cliente(s) • <span id="cobSelValor">R$ 0,00</span></div></div><div class="d-flex gap-2 flex-wrap"><button class="btn btn-outline-light btn-sm" onclick="cobLimparSelecao()"><i class="fa-solid fa-xmark me-1"></i> Limpar seleção</button><button class="btn btn-light btn-sm" onclick="cobPrepararSelecionados()"><i class="fa-solid fa-file-pen text-success me-1"></i> Preparar rascunhos</button></div></div></div>
+<div class="cob-sticky mb-3" id="cobActionWrap" style="display:none"><div class="cob-actionbar d-flex justify-content-between align-items-center gap-3 flex-wrap"><div><div class="small text-white-50">Clientes selecionados</div><div class="fw-bold"><span id="cobSelCount">0</span> cliente(s) • <span id="cobSelValor">R$ 0,00</span></div></div><div class="d-flex gap-2 flex-wrap"><button class="btn btn-outline-light btn-sm" onclick="cobLimparSelecao()"><i class="fa-solid fa-xmark me-1"></i> Limpar seleção</button><button class="btn btn-light btn-sm" id="cobBulkDraftBtn" onclick="cobPrepararSelecionados()"><i class="fa-brands fa-google text-success me-1"></i> Preparar rascunhos</button></div></div></div>
 <div class="row g-3"><div class="col-12 col-xl-7"><div class="card card-panel shadow-sm h-100"><div class="card-header"><span><i class="fa-solid fa-circle-info text-primary me-2"></i>Como funciona</span></div><div class="card-body"><div class="row g-3"><div class="col-md-4"><div class="border rounded-3 p-3 h-100"><div class="fw-bold text-primary mb-1">1. Cruzamento</div><div class="cob-help">O CNPJ do Aging é comparado com a base de e-mails. Contatos ficam gravados por empresa.</div></div></div><div class="col-md-4"><div class="border rounded-3 p-3 h-100"><div class="fw-bold text-success mb-1">2. Consolidação</div><div class="cob-help">Todos os títulos do mesmo CNPJ entram em uma única cobrança, evitando mensagens duplicadas.</div></div></div><div class="col-md-4"><div class="border rounded-3 p-3 h-100"><div class="fw-bold text-warning mb-1">3. Controle</div><div class="cob-help">O sistema prepara o texto e abre a composição no Gmail. O envio continua sob sua aprovação.</div></div></div></div></div></div></div><div class="col-12 col-xl-5"><div class="card card-panel shadow-sm h-100"><div class="card-header"><span><i class="fa-solid fa-clock-rotate-left text-secondary me-2"></i>Histórico recente</span><button class="btn btn-outline-secondary btn-sm" onclick="cobLimparHistorico()">Limpar</button></div><div class="card-body cob-history" id="cobHistorico"><div class="empty-state py-4">Nenhuma ação registrada.</div></div></div></div></div>
 </section>
 
@@ -318,7 +318,54 @@ function cobTextoGrupo(g){const linhas=[...g.titulos].sort((a,b)=>(a.venc||0)-(b
 function cobAssuntoGrupo(g){return `${empresaCfg().nome} | Cobrança de títulos em aberto | ${g.cli}`}
 function cobCriarRascunho(g){const c=g.contato||{para:[],cc:[]};const r={key:g.key,cli:g.cli,doc:g.doc,to:c.para.join(';'),cc:cobCcComObrigatorio(c.cc).join(';'),subject:cobAssuntoGrupo(g),body:cobTextoGrupo(g),criadoEm:new Date().toISOString(),total:g.total,qtd:g.titulos.length,fingerprint:cobFingerprint(g)};COB_RASCUNHOS[g.key]=r;cobSalvarRascunhos();cobHistoricoAdd(g,'Rascunho preparado');return r}
 function cobHistoricoAdd(g,acao){COB_HIST.unshift({id:Date.now()+'_'+Math.random().toString(36).slice(2,7),key:g.key,cli:g.cli,doc:g.doc,acao,quando:new Date().toISOString(),total:g.total,qtd:g.titulos.length,fingerprint:cobFingerprint(g)});COB_HIST=COB_HIST.slice(0,200);cobSalvarHistorico()}
-function cobPrepararSelecionados(){const gs=cobAgrupar().filter(g=>COB_SEL.has(g.key)&&!g.estado.bloqueado&&g.contato&&g.contato.para.length);if(!gs.length){alert('Selecione ao menos um cliente apto para cobrança.');return}gs.forEach(cobCriarRascunho);COB_SEL.clear();cobRender();alert(`${gs.length} rascunho(s) preparado(s). Você pode revisar e criar cada rascunho no Gmail com as NFs anexadas.`)}
+async function cobCriarGmailGrupo(g){
+  const r=cobCriarRascunho(g);
+  const d={to:r.to,cc:cobCcComObrigatorio(r.cc||'').join(';'),subject:r.subject,body:r.body};
+  const info=await cobAnexosNfGrupo(g);
+  if(info.semNumero.length)throw new Error('Título(s) sem número de NF: '+info.semNumero.join(', '));
+  if(info.faltantes.length)throw new Error('Faltam PDFs das NFs: '+info.faltantes.join(', '));
+  if(!info.anexos.length)throw new Error('Nenhum PDF de NF localizado para este cliente.');
+  const raw=await cobMontarMimeComAnexos(d,info.anexos);
+  const draft=await cobCriarDraftGmail(raw);
+  cobHistoricoAdd(g,'Rascunho Gmail criado com NFs');
+  if(COB_RASCUNHOS[g.key]){
+    COB_RASCUNHOS[g.key].gmailDraftId=draft.id||'';
+    COB_RASCUNHOS[g.key].anexosNf=info.anexos.map(a=>a.nf);
+    COB_RASCUNHOS[g.key].gmailCriadoEm=new Date().toISOString();
+    cobSalvarRascunhos();
+  }
+  return{g,draft,anexos:info.anexos};
+}
+async function cobPrepararSelecionados(){
+  const gs=cobAgrupar().filter(g=>COB_SEL.has(g.key)&&!g.estado.bloqueado&&g.contato&&g.contato.para.length);
+  if(!gs.length){alert('Selecione ao menos um cliente apto para cobrança.');return}
+  if(!NF_GMAIL_TOKEN){nfGmailConectar();alert('Conecte o Gmail e autorize a criação de rascunhos. Depois clique novamente em “Preparar rascunhos”.');return}
+  const btn=document.getElementById('cobBulkDraftBtn');
+  const total=gs.length;
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span> Criando 0/'+total+'...'}
+  const ok=[],falhas=[];
+  try{
+    for(let i=0;i<gs.length;i++){
+      const g=gs[i];
+      if(btn)btn.innerHTML='<span class="spinner-border spinner-border-sm me-1"></span> Criando '+(i+1)+'/'+total+'...';
+      try{
+        const res=await cobCriarGmailGrupo(g);
+        ok.push(res);
+      }catch(e){
+        console.error('Falha ao criar rascunho Gmail para',g.cli,e);
+        falhas.push({cli:g.cli,erro:e&&e.message?e.message:String(e)});
+      }
+    }
+  }finally{
+    if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-brands fa-google text-success me-1"></i> Preparar rascunhos'}
+  }
+  COB_SEL.clear();
+  cobRender();
+  if(ok.length)window.open('https://mail.google.com/mail/#drafts','_blank','noopener');
+  let msg=ok.length+' de '+total+' rascunho(s) criado(s) no Gmail.';
+  if(falhas.length){msg+='\n\nNão criados:';falhas.forEach(f=>{msg+='\n• '+f.cli+': '+f.erro})}
+  alert(msg);
+}
 function cobAbrirPreview(key,abrirGmail=false){const g=cobAgrupar().find(x=>x.key===key);if(!g||!g.contato||!g.contato.para.length)return;COB_PREVIEW_KEY=key;const existente=COB_RASCUNHOS[key];const r=(!existente||existente.fingerprint!==cobFingerprint(g)||/dias? em atraso/i.test(existente.body||''))?cobCriarRascunho(g):existente;document.getElementById('cobPreviewCliente').textContent=`${g.cli} • ${g.titulos.length} título(s) • ${brl(g.total)}`;document.getElementById('cobPreviewTo').value=r.to;document.getElementById('cobPreviewCc').value=cobCcComObrigatorio(r.cc||'').join(';');document.getElementById('cobPreviewSubject').value=r.subject;document.getElementById('cobPreviewBody').value=r.body;const nfs=nfStatusGrupo(g),inf=document.getElementById('cobPreviewNfInfo');if(inf){inf.className='alert border small mb-0 '+(nfs.total&&nfs.ok===nfs.total?'alert-success':'alert-warning');inf.innerHTML=nfs.total&&nfs.ok===nfs.total?`<i class="fa-solid fa-paperclip me-1"></i> ${nfs.ok}/${nfs.total} NF(s) com PDF pronta(s) para anexar ao rascunho Gmail.`:`<i class="fa-solid fa-triangle-exclamation me-1"></i> PDFs disponíveis: ${nfs.ok}/${nfs.total}. Localize todas as NFs antes de criar o rascunho.`}const modal=bootstrap.Modal.getOrCreateInstance(document.getElementById('cobPreviewModal'));modal.show();if(abrirGmail)setTimeout(()=>cobAbrirGmailAtual(),350)}
 function cobPreviewDados(){const cc=cobCcComObrigatorio(document.getElementById('cobPreviewCc').value).join(';');document.getElementById('cobPreviewCc').value=cc;return{to:document.getElementById('cobPreviewTo').value.trim(),cc,subject:document.getElementById('cobPreviewSubject').value.trim(),body:document.getElementById('cobPreviewBody').value}}
 function cobSalvarEdicaoPreview(){if(!COB_PREVIEW_KEY)return null;const g=cobAgrupar().find(x=>x.key===COB_PREVIEW_KEY);if(!g)return null;const d=cobPreviewDados(),old=COB_RASCUNHOS[COB_PREVIEW_KEY]||{};COB_RASCUNHOS[COB_PREVIEW_KEY]={...old,...d,key:g.key,cli:g.cli,doc:g.doc,total:g.total,qtd:g.titulos.length,fingerprint:cobFingerprint(g),atualizadoEm:new Date().toISOString()};cobSalvarRascunhos();return g}
