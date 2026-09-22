@@ -172,9 +172,9 @@ function setStatus(key,valor){valor=normalizarStatus(valor);if(!NOTAS[key])NOTAS
 function setPrazo(key,valor){if(!NOTAS[key])NOTAS[key]={status:STATUS_DEFAULT};NOTAS[key].prazo=valor||'';NOTAS[key].prazoAtualizadoEm=new Date().toISOString();salvarNotas();const rec=DADOS.find(d=>d.persistKey===key||d.id===key);if(rec)rec.prazo=valor?parseDataLocalIso(valor):null;persistirBase();renderTudo(FONTE_ATUAL)}
 function statusSelect(key,val){val=normalizarStatus(val);const opts=STATUS_OPCOES.map(k=>`<option value="${k}"${k===val?' selected':''}>${statusMap[k].txt}</option>`).join('');return`<select class="status-select ${statusMap[val].cls}" data-id="${escAttr(key)}" aria-label="Classificação do título">${opts}</select>`}
 function prazoInput(key,prazo,status){const ativo=status==='notificacao';const valor=dataInputValue(prazo);return `<input type="date" class="form-control form-control-sm prazo-notificacao-input" data-id="${escAttr(key)}" value="${valor}" ${ativo?'':'disabled'} style="min-width:145px;max-width:165px;margin:auto" aria-label="Prazo de vencimento da notificação" title="${ativo?'Informe o vencimento da notificação':'Selecione o status Notificar para definir o prazo'}">`}
-function serializaRegistro(d){return {...d,venc:d.venc?d.venc.toISOString():null,prazo:d.prazo?d.prazo.toISOString():null,dataDocumento:d.dataDocumento?d.dataDocumento.toISOString():null,dataLancamento:d.dataLancamento?d.dataLancamento.toISOString():null,dataPagamento:d.dataPagamento?d.dataPagamento.toISOString():null}}function persistirBase(){const payload={empresa:EMPRESA_ATIVA,nome:FONTE_ATUAL,modeloBase:'BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06',clienteOrigem:'COLUNA_S',clienteOrigemAntigos:'COLUNA_G',quando:new Date().toISOString(),dados:DADOS.map(serializaRegistro),aVencer:DADOS_VENCER.map(serializaRegistro),recebidos:DADOS_RECEBIDOS.map(serializaRegistro)};try{localStorage.setItem(empresaKey('cobranca'),JSON.stringify(payload))}catch(e){}}
+function serializaRegistro(d){return {...d,venc:d.venc?d.venc.toISOString():null,prazo:d.prazo?d.prazo.toISOString():null,dataDocumento:d.dataDocumento?d.dataDocumento.toISOString():null,dataLancamento:d.dataLancamento?d.dataLancamento.toISOString():null,dataPagamento:d.dataPagamento?d.dataPagamento.toISOString():null}}function persistirBase(){const payload={empresa:EMPRESA_ATIVA,nome:FONTE_ATUAL,modeloBase:'BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06 v2',clienteOrigem:'NOME_FANTASIA_CABECALHO_G_ANTIGO',quando:new Date().toISOString(),dados:DADOS.map(serializaRegistro),aVencer:DADOS_VENCER.map(serializaRegistro),recebidos:DADOS_RECEBIDOS.map(serializaRegistro)};try{localStorage.setItem(empresaKey('cobranca'),JSON.stringify(payload))}catch(e){}}
 function hidrataRegistro(d,usarStatus=true){const venc=d.venc?new Date(d.venc):null;const prazoBase=d.prazo?new Date(d.prazo):null;const dataDocumento=d.dataDocumento?new Date(d.dataDocumento):null;const dataLancamento=d.dataLancamento?new Date(d.dataLancamento):null;const dataPagamento=d.dataPagamento?new Date(d.dataPagamento):null;const titulo=d.titulo||tituloLegadoDoRegistro(d);const persistKey=d.persistKey||tituloPersistKey(titulo,d.doc,venc,d.cli);const id=d.id&&!/-\d+$/.test(d.id)?d.id:'TIT-'+titulo;return {...d,id,titulo,persistKey,venc,dataDocumento,dataLancamento,dataPagamento,prazo:usarStatus?getPrazo(persistKey,prazoBase,d.id):prazoBase,status:usarStatus?getStatus(persistKey,STATUS_DEFAULT,d.id):(d.status||STATUS_DEFAULT)}}
-function restaurarBase(){let o=null;try{o=JSON.parse(localStorage.getItem(empresaKey('cobranca'))||'null')}catch(e){}if(!o||(!o.dados&&!o.aVencer&&!o.recebidos))return false;if(o.clienteOrigem!=='COLUNA_S'||o.clienteOrigemAntigos!=='COLUNA_G'||o.modeloBase!=='BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06'){console.info('Base local anterior ignorada: reimporte a BASE AGING LIST para aplicar a coluna G como nome do cliente nos títulos antigos.');return false;}FONTE_ATUAL=o.nome||'-';DADOS=(o.dados||[]).map(d=>hidrataRegistro(d,true));DADOS_VENCER=(o.aVencer||[]).map(d=>hidrataRegistro(d,false));DADOS_RECEBIDOS=(o.recebidos||[]).map(d=>hidrataRegistro(d,false));renderTudo(FONTE_ATUAL);const quando=o.quando?new Date(o.quando):null;document.getElementById('dzStatus').innerHTML=`<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Base restaurada</span>: ${DADOS.length} vencidos • ${DADOS_VENCER.length} a vencer • ${DADOS_RECEBIDOS.length} recebidos`+(quando?` • ${quando.toLocaleDateString('pt-BR')}`:'');return true}
+function restaurarBase(){let o=null;try{o=JSON.parse(localStorage.getItem(empresaKey('cobranca'))||'null')}catch(e){}if(!o||(!o.dados&&!o.aVencer&&!o.recebidos))return false;if(o.clienteOrigem!=='NOME_FANTASIA_CABECALHO_G_ANTIGO'||o.modeloBase!=='BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06 v2'){console.info('Base local anterior ignorada: reimporte a BASE AGING LIST para incluir tambem a aba TITULOS ABERTO ANTIGO ATE 30.06.');return false;}FONTE_ATUAL=o.nome||'-';DADOS=(o.dados||[]).map(d=>hidrataRegistro(d,true));DADOS_VENCER=(o.aVencer||[]).map(d=>hidrataRegistro(d,false));DADOS_RECEBIDOS=(o.recebidos||[]).map(d=>hidrataRegistro(d,false));renderTudo(FONTE_ATUAL);const quando=o.quando?new Date(o.quando):null;document.getElementById('dzStatus').innerHTML=`<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Base restaurada</span>: ${DADOS.length} vencidos • ${DADOS_VENCER.length} a vencer • ${DADOS_RECEBIDOS.length} recebidos`+(quando?` • ${quando.toLocaleDateString('pt-BR')}`:'');return true}
 function limparBase(){const cfg=empresaCfg();if(confirm(`Remover a base salva de ${cfg.nome} neste navegador? (as classificações de status serão mantidas)`)){try{localStorage.removeItem(empresaKey('cobranca'))}catch(e){}DADOS=[];DADOS_VENCER=[];DADOS_RECEBIDOS=[];FONTE_ATUAL='-';renderTudo(FONTE_ATUAL);atualizarIdentidadeEmpresa();document.getElementById('dzStatus').innerHTML=`<span class="text-secondary"><i class="fa-regular fa-folder-open me-1"></i>Nenhuma BASE AGING LIST integrada carregada</span>`}}
 function atualizarIdentidadeEmpresa(){const cfg=empresaCfg();const sel=document.getElementById('empresaSelect');if(sel)sel.value=EMPRESA_ATIVA;const brand=document.getElementById('brandEmpresa');if(brand)brand.textContent=cfg.nome;const aging=document.getElementById('agingEmpresaLabel');if(aging)aging.textContent='Base integrada • visão: '+cfg.nome;const topSub=document.getElementById('topbarSub');if(topSub)topSub.textContent=`${cfg.nome} • carteira vencida filtrada automaticamente pela coluna Empresa da BASE AGING LIST`;const pe=document.getElementById('printEmpresa');if(pe)pe.textContent=cfg.nome+' - Painel Financeiro x Jurídico';const mt=document.getElementById('encDadosEmpresaTitulo');if(mt)mt.textContent='Dados '+cfg.nome;document.title='Kroma | Monitoramento de Cobranças';}
 function renderEstadoVazio(){DADOS=[];DADOS_VENCER=[];DADOS_RECEBIDOS=[];FONTE_ATUAL='-';renderTudo(FONTE_ATUAL);const dz=document.getElementById('dzStatus');if(dz)dz.innerHTML=`<span class="text-secondary"><i class="fa-regular fa-folder-open me-1"></i>Nenhuma BASE AGING LIST integrada carregada</span>`;}
@@ -188,9 +188,30 @@ function chaveUnicaAberto(chave,d){const dt=d&&d.venc?`${d.venc.getFullYear()}-$
 function notasDaEmpresa(chave){try{return JSON.parse(localStorage.getItem(empresaKeyPorChave(chave,'notas_juridico'))||'{}')}catch(e){return{}}}
 function statusPersistidoEmpresa(chave,key){const notas=notasDaEmpresa(chave),n=notas[key];return normalizarStatus(n&&n.status?n.status:STATUS_DEFAULT)}
 function prazoPersistidoEmpresa(chave,key){const notas=notasDaEmpresa(chave),n=notas[key];if(n&&Object.prototype.hasOwnProperty.call(n,'prazo'))return n.prazo?parseDataLocalIso(n.prazo):null;return null}
-function serializarDadosEmpresa(chave,nomeArq,dados,aVencer,recebidos){const payload={empresa:chave,nome:nomeArq,modeloBase:'BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06',clienteOrigem:'COLUNA_S',clienteOrigemAntigos:'COLUNA_G',quando:new Date().toISOString(),dados:dados.map(serializaRegistro),aVencer:aVencer.map(serializaRegistro),recebidos:recebidos.map(serializaRegistro)};try{localStorage.setItem(empresaKeyPorChave(chave,'cobranca'),JSON.stringify(payload))}catch(e){console.warn('Não foi possível persistir toda a base de '+chave,e)}}
+function serializarDadosEmpresa(chave,nomeArq,dados,aVencer,recebidos){const payload={empresa:chave,nome:nomeArq,modeloBase:'BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06 v2',clienteOrigem:'NOME_FANTASIA_CABECALHO_G_ANTIGO',quando:new Date().toISOString(),dados:dados.map(serializaRegistro),aVencer:aVencer.map(serializaRegistro),recebidos:recebidos.map(serializaRegistro)};try{localStorage.setItem(empresaKeyPorChave(chave,'cobranca'),JSON.stringify(payload))}catch(e){console.warn('Não foi possível persistir toda a base de '+chave,e)}}
 function processarWorkbook(wb,nomeArq){
-  const nomeAba=wb.Sheets['BASE RECEBIMENTOS']?'BASE RECEBIMENTOS':wb.SheetNames[0];
+  // Localiza a aba principal pelo CONTEUDO, e nao apenas pelo nome/ordem das abas.
+  // Isso evita interpretar a aba historica como BASE RECEBIMENTOS quando o arquivo publicado
+  // no GitHub tiver ordem de abas diferente ou pequenas variacoes no nome da guia.
+  const localizarAbaRecebimentos=()=>{
+    const nomes=[...wb.SheetNames];
+    const preferida=nomes.find(n=>norm(n)===norm('BASE RECEBIMENTOS'));
+    if(preferida)return preferida;
+    for(const nome of nomes){
+      const sh=wb.Sheets[nome];if(!sh)continue;
+      const amostra=XLSX.utils.sheet_to_json(sh,{header:1,raw:true,defval:'',range:0});
+      if(!amostra.length)continue;
+      const h=amostra[0]||[];
+      const temEmpresa=mapCol(h,['Empresa'])>=0;
+      const temSaldo=mapCol(h,['Total faltando','Total Faltando'])>=0;
+      const temNomeFantasia=mapCol(h,['NOME FANTASIA','Nome Fantasia'])>=0;
+      const temVenc=mapCol(h,['Data do Vencimento','Data Vencimento'])>=0;
+      if(temEmpresa&&temSaldo&&temNomeFantasia&&temVenc)return nome;
+    }
+    return null;
+  };
+  const nomeAba=localizarAbaRecebimentos();
+  if(!nomeAba){alert('Não encontrei a aba de recebimentos da BASE AGING LIST. Verifique se existem as colunas Empresa, Total faltando, Data do Vencimento e NOME FANTASIA.');return}
   const ws=wb.Sheets[nomeAba];
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
   if(!rows.length){alert('Planilha vazia.');return}
@@ -216,9 +237,9 @@ function processarWorkbook(wb,nomeArq){
   }
   const cEmpresa=mapCol(headers,['Empresa']);
   const cCodigo=mapCol(headers,['Código do cliente/fornecedor','Codigo do cliente/fornecedor','Código do cliente','Codigo do cliente']);
-  const cCli=18; // COLUNA S da planilha: NOME FANTASIA. A coluna C permanece apenas como código do cliente/fornecedor.
-  if(headers.length<=cCli){alert('A nova BASE AGING LIST não possui a coluna S necessária para o nome do cliente.');return;}
-  if(norm(headers[cCli])!==norm('NOME FANTASIA')){alert('A coluna S da nova BASE AGING LIST deve ser "NOME FANTASIA". Cabeçalho encontrado: '+(headers[cCli]||'(vazio)'));return;}
+  // Na BASE RECEBIMENTOS o nome do cliente vem de NOME FANTASIA.
+  // A coluna e localizada pelo cabecalho para suportar mudancas de posicao no arquivo publicado.
+  const cCli=mapCol(headers,['NOME FANTASIA','Nome Fantasia']);
   const cTitulo=mapCol(headers,['N° da Nota Fiscal','Nº da Nota Fiscal','No da Nota Fiscal','Nota Fiscal']);
   const cVenc=mapCol(headers,['Data do Vencimento','Data Vencimento','Vencimento']);
   const cSaldo=mapCol(headers,['Total faltando','Total Faltando','Saldo Parcela','Valor Devedor']);
@@ -230,7 +251,7 @@ function processarWorkbook(wb,nomeArq){
   const cTipoDoc=mapCol(headers,['Tipo de doc','Tipo Documento']);
   const cObs=mapCol(headers,['Observação do lançamento','Observacao do lancamento','Observação']);
   const cReceb=mapCol(headers,['Criado mediante execução do pagamento','Criado mediante execucao do pagamento']);
-  const obrigatorias=[['Empresa',cEmpresa],['Coluna S - NOME FANTASIA',cCli],['N° da Nota Fiscal',cTitulo],['Data do Vencimento',cVenc],['Total faltando',cSaldo]];
+  const obrigatorias=[['Empresa',cEmpresa],['NOME FANTASIA',cCli],['N° da Nota Fiscal',cTitulo],['Data do Vencimento',cVenc],['Total faltando',cSaldo]];
   const faltando=obrigatorias.filter(x=>x[1]<0).map(x=>x[0]);
   if(faltando.length){alert('A nova base não contém as colunas obrigatórias: '+faltando.join(', '));return}
 
@@ -281,9 +302,7 @@ function processarWorkbook(wb,nomeArq){
       const aDocumento=mapCol(ah,['Documento']);
       const aSerie=mapCol(ah,['Serie do Documento','Série do Documento']);
       const aCodigo=mapCol(ah,['Codigo Parceiro','Código Parceiro']);
-      const aCli=6; // COLUNA G da aba TITULOS ABERTO ANTIGO ATE 30.06: Nome Fantasia do Parceiro (nome do cliente)
-      if(ah.length<=aCli)console.warn('A aba TITULOS ABERTO ANTIGO ATE 30.06 não possui a coluna G para identificação do cliente.');
-      else if(norm(ah[aCli])!==norm('Nome Fantasia do Parceiro'))console.warn('A coluna G dos títulos antigos será usada como nome do cliente. Cabeçalho encontrado:',ah[aCli]);
+      const aCli=6; // COLUNA G da aba TITULOS ABERTO ANTIGO ATE 30.06: nome do cliente (Nome Fantasia do Parceiro)
       const aSaldo=mapCol(ah,['Saldo Parcela','Valor Devedor']);
       const aRazao=mapCol(ah,['Nome Parceiro','Razao','Razão']);
       const aCnpj=mapCol(ah,['CNPJ/CPF','CNPJ','CPF']);
@@ -291,10 +310,12 @@ function processarWorkbook(wb,nomeArq){
       const aVenc=mapCol(ah,['Data Vencimento','Data do Vencimento','Vencimento']);
       const aTipo=mapCol(ah,['Tipo Documento','Tipo de doc']);
       const aObs=mapCol(ah,['Observacoes','Observações','Observacao','Observação']);
+      if(ah.length<=aCli){console.warn('A aba TITULOS ABERTO ANTIGO ATE 30.06 não possui a coluna G; títulos históricos serão ignorados.');}
       const chavesExistentes=new Set();
       Object.entries(porEmpresa).forEach(([k,lista])=>lista.forEach(d=>chavesExistentes.add(chaveUnicaAberto(k,d))));
       Object.entries(vencerPorEmpresa).forEach(([k,lista])=>lista.forEach(d=>chavesExistentes.add(chaveUnicaAberto(k,d))));
       for(let ai=1;ai<antRows.length;ai++){
+        if(ah.length<=aCli)break;
         const r=antRows[ai];if(!r||r.every(x=>x===''||x==null))continue;
         const filial=aFilial>=0?(r[aFilial]||'').toString():'';
         const chave=classificarEmpresaBase(filial);if(!chave)continue;
