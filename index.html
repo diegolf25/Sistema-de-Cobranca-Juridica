@@ -159,6 +159,14 @@ const EMPRESAS={
 let EMPRESA_ATIVA=(()=>{try{const k=localStorage.getItem('kroma_empresa_ativa');return EMPRESAS[k]?k:'energia'}catch(e){return'energia'}})();
 const empresaCfg=()=>EMPRESAS[EMPRESA_ATIVA]||EMPRESAS.energia;
 const empresaKey=suf=>empresaCfg().prefix+'_'+suf;
+const BAIXA_SENHA_HASH='929ab86ec27b81fc3e922a10b6905de284a995a93d8f0c0d63cbd95966fe86f6';
+function baixaStoreKey(chave){return empresaKeyPorChave(chave||EMPRESA_ATIVA,'baixas_manuais_v1')}
+function carregarBaixas(chave=EMPRESA_ATIVA){try{return JSON.parse(localStorage.getItem(baixaStoreKey(chave))||'{}')}catch(e){return{}}}
+function chaveBaixaTitulo(d){return d?.persistKey||tituloPersistKey(d?.titulo||tituloLegadoDoRegistro(d),d?.doc,d?.venc,d?.cli)}
+function tituloEstaBaixado(chave,d){const k=chaveBaixaTitulo(d);return !!(k&&carregarBaixas(chave)[k])}
+function salvarBaixaTitulo(chave,d){const k=chaveBaixaTitulo(d);if(!k)return false;const baixas=carregarBaixas(chave);baixas[k]={titulo:d.titulo||tituloLegadoDoRegistro(d),cliente:d.cli||'',codigo:d.doc||'',vencimento:d.venc?dataInputValue(d.venc):'',valor:Number(d.valor)||0,origem:d.origemBase||'BASE RECEBIMENTOS',baixadoEm:new Date().toISOString()};try{localStorage.setItem(baixaStoreKey(chave),JSON.stringify(baixas));return true}catch(e){alert('Não foi possível registrar a baixa neste navegador.');return false}}
+async function sha256Hex(txt){if(!window.crypto||!window.crypto.subtle)throw new Error('Validação de senha indisponível neste navegador. Abra o sistema pela página HTTPS publicada no GitHub.');const data=new TextEncoder().encode(txt);const hash=await crypto.subtle.digest('SHA-256',data);return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('')}
+async function baixarTituloManual(key){const d=DADOS.find(x=>(x.persistKey||x.id)===key||chaveBaixaTitulo(x)===key);if(!d){alert('Título não encontrado na carteira atual.');return}const senha=prompt('Digite a senha para dar baixa no título '+(d.titulo||tituloLegadoDoRegistro(d))+':');if(senha===null)return;let ok=false;try{ok=(await sha256Hex(senha))===BAIXA_SENHA_HASH}catch(e){alert(e.message||e);return}if(!ok){alert('Senha incorreta. A baixa não foi realizada.');return}if(!confirm('Confirma a baixa do título '+(d.titulo||tituloLegadoDoRegistro(d))+' de '+(d.cli||'cliente')+' no valor de '+brl(d.valor)+'?\n\nO título será retirado do Aging List e das visões da carteira em aberto.'))return;if(!salvarBaixaTitulo(EMPRESA_ATIVA,d))return;DADOS=DADOS.filter(x=>chaveBaixaTitulo(x)!==chaveBaixaTitulo(d));persistirBase();renderTudo(FONTE_ATUAL);alert('Baixa realizada com sucesso. O título não voltará ao Aging List ao atualizar ou reimportar a mesma base.')}
 let DADOS=[];let DADOS_VENCER=[];let DADOS_RECEBIDOS=[];let charts={};let FONTE_ATUAL='-';let NOTAS={};
 function carregarNotasEmpresa(){try{NOTAS=JSON.parse(localStorage.getItem(empresaKey('notas_juridico'))||'{}')}catch(e){NOTAS={}}migrarNotasLegadas()}
 function migrarNotasLegadas(){let base=null;try{base=JSON.parse(localStorage.getItem(empresaKey('cobranca'))||'null')}catch(e){}if(!base||!Array.isArray(base.dados))return;let mudou=false;base.dados.forEach(d=>{const venc=d.venc?new Date(d.venc):null;const titulo=tituloLegadoDoRegistro(d);const key=d.persistKey||tituloPersistKey(titulo,d.doc,venc,d.cli);const antiga=NOTAS[d.id];if(!NOTAS[key]&&antiga&&antiga.status){NOTAS[key]={...antiga,status:normalizarStatus(antiga.status)};mudou=true}});if(mudou)salvarNotas()}
@@ -172,9 +180,9 @@ function setStatus(key,valor){valor=normalizarStatus(valor);if(!NOTAS[key])NOTAS
 function setPrazo(key,valor){if(!NOTAS[key])NOTAS[key]={status:STATUS_DEFAULT};NOTAS[key].prazo=valor||'';NOTAS[key].prazoAtualizadoEm=new Date().toISOString();salvarNotas();const rec=DADOS.find(d=>d.persistKey===key||d.id===key);if(rec)rec.prazo=valor?parseDataLocalIso(valor):null;persistirBase();renderTudo(FONTE_ATUAL)}
 function statusSelect(key,val){val=normalizarStatus(val);const opts=STATUS_OPCOES.map(k=>`<option value="${k}"${k===val?' selected':''}>${statusMap[k].txt}</option>`).join('');return`<select class="status-select ${statusMap[val].cls}" data-id="${escAttr(key)}" aria-label="Classificação do título">${opts}</select>`}
 function prazoInput(key,prazo,status){const ativo=status==='notificacao';const valor=dataInputValue(prazo);return `<input type="date" class="form-control form-control-sm prazo-notificacao-input" data-id="${escAttr(key)}" value="${valor}" ${ativo?'':'disabled'} style="min-width:145px;max-width:165px;margin:auto" aria-label="Prazo de vencimento da notificação" title="${ativo?'Informe o vencimento da notificação':'Selecione o status Notificar para definir o prazo'}">`}
-function serializaRegistro(d){return {...d,venc:d.venc?d.venc.toISOString():null,prazo:d.prazo?d.prazo.toISOString():null,dataDocumento:d.dataDocumento?d.dataDocumento.toISOString():null,dataLancamento:d.dataLancamento?d.dataLancamento.toISOString():null,dataPagamento:d.dataPagamento?d.dataPagamento.toISOString():null}}function persistirBase(){const payload={empresa:EMPRESA_ATIVA,nome:FONTE_ATUAL,modeloBase:'BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06 v3',clienteOrigem:'NOME_FANTASIA_FALLBACK_FORNECEDOR_G_ANTIGO',quando:new Date().toISOString(),dados:DADOS.map(serializaRegistro),aVencer:DADOS_VENCER.map(serializaRegistro),recebidos:DADOS_RECEBIDOS.map(serializaRegistro)};try{localStorage.setItem(empresaKey('cobranca'),JSON.stringify(payload))}catch(e){}}
+function serializaRegistro(d){return {...d,venc:d.venc?d.venc.toISOString():null,prazo:d.prazo?d.prazo.toISOString():null,dataDocumento:d.dataDocumento?d.dataDocumento.toISOString():null,dataLancamento:d.dataLancamento?d.dataLancamento.toISOString():null,dataPagamento:d.dataPagamento?d.dataPagamento.toISOString():null}}function persistirBase(){const payload={empresa:EMPRESA_ATIVA,nome:FONTE_ATUAL,modeloBase:'BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06',clienteOrigem:'COLUNA_S',quando:new Date().toISOString(),dados:DADOS.map(serializaRegistro),aVencer:DADOS_VENCER.map(serializaRegistro),recebidos:DADOS_RECEBIDOS.map(serializaRegistro)};try{localStorage.setItem(empresaKey('cobranca'),JSON.stringify(payload))}catch(e){}}
 function hidrataRegistro(d,usarStatus=true){const venc=d.venc?new Date(d.venc):null;const prazoBase=d.prazo?new Date(d.prazo):null;const dataDocumento=d.dataDocumento?new Date(d.dataDocumento):null;const dataLancamento=d.dataLancamento?new Date(d.dataLancamento):null;const dataPagamento=d.dataPagamento?new Date(d.dataPagamento):null;const titulo=d.titulo||tituloLegadoDoRegistro(d);const persistKey=d.persistKey||tituloPersistKey(titulo,d.doc,venc,d.cli);const id=d.id&&!/-\d+$/.test(d.id)?d.id:'TIT-'+titulo;return {...d,id,titulo,persistKey,venc,dataDocumento,dataLancamento,dataPagamento,prazo:usarStatus?getPrazo(persistKey,prazoBase,d.id):prazoBase,status:usarStatus?getStatus(persistKey,STATUS_DEFAULT,d.id):(d.status||STATUS_DEFAULT)}}
-function restaurarBase(){let o=null;try{o=JSON.parse(localStorage.getItem(empresaKey('cobranca'))||'null')}catch(e){}if(!o||(!o.dados&&!o.aVencer&&!o.recebidos))return false;if(o.clienteOrigem!=='NOME_FANTASIA_FALLBACK_FORNECEDOR_G_ANTIGO'||o.modeloBase!=='BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06 v3'){console.info('Base local anterior ignorada: reimporte a BASE AGING LIST para incluir tambem a aba TITULOS ABERTO ANTIGO ATE 30.06.');return false;}FONTE_ATUAL=o.nome||'-';DADOS=(o.dados||[]).map(d=>hidrataRegistro(d,true));DADOS_VENCER=(o.aVencer||[]).map(d=>hidrataRegistro(d,false));DADOS_RECEBIDOS=(o.recebidos||[]).map(d=>hidrataRegistro(d,false));renderTudo(FONTE_ATUAL);const quando=o.quando?new Date(o.quando):null;document.getElementById('dzStatus').innerHTML=`<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Base restaurada</span>: ${DADOS.length} vencidos • ${DADOS_VENCER.length} a vencer • ${DADOS_RECEBIDOS.length} recebidos`+(quando?` • ${quando.toLocaleDateString('pt-BR')}`:'');return true}
+function restaurarBase(){let o=null;try{o=JSON.parse(localStorage.getItem(empresaKey('cobranca'))||'null')}catch(e){}if(!o||(!o.dados&&!o.aVencer&&!o.recebidos))return false;if(o.clienteOrigem!=='COLUNA_S'||o.modeloBase!=='BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06'){console.info('Base local anterior ignorada: reimporte a BASE AGING LIST para incluir tambem a aba TITULOS ABERTO ANTIGO ATE 30.06.');return false;}FONTE_ATUAL=o.nome||'-';DADOS=(o.dados||[]).map(d=>hidrataRegistro(d,true)).filter(d=>!tituloEstaBaixado(EMPRESA_ATIVA,d));DADOS_VENCER=(o.aVencer||[]).map(d=>hidrataRegistro(d,false));DADOS_RECEBIDOS=(o.recebidos||[]).map(d=>hidrataRegistro(d,false));renderTudo(FONTE_ATUAL);const quando=o.quando?new Date(o.quando):null;document.getElementById('dzStatus').innerHTML=`<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Base restaurada</span>: ${DADOS.length} vencidos • ${DADOS_VENCER.length} a vencer • ${DADOS_RECEBIDOS.length} recebidos`+(quando?` • ${quando.toLocaleDateString('pt-BR')}`:'');return true}
 function limparBase(){const cfg=empresaCfg();if(confirm(`Remover a base salva de ${cfg.nome} neste navegador? (as classificações de status serão mantidas)`)){try{localStorage.removeItem(empresaKey('cobranca'))}catch(e){}DADOS=[];DADOS_VENCER=[];DADOS_RECEBIDOS=[];FONTE_ATUAL='-';renderTudo(FONTE_ATUAL);atualizarIdentidadeEmpresa();document.getElementById('dzStatus').innerHTML=`<span class="text-secondary"><i class="fa-regular fa-folder-open me-1"></i>Nenhuma BASE AGING LIST integrada carregada</span>`}}
 function atualizarIdentidadeEmpresa(){const cfg=empresaCfg();const sel=document.getElementById('empresaSelect');if(sel)sel.value=EMPRESA_ATIVA;const brand=document.getElementById('brandEmpresa');if(brand)brand.textContent=cfg.nome;const aging=document.getElementById('agingEmpresaLabel');if(aging)aging.textContent='Base integrada • visão: '+cfg.nome;const topSub=document.getElementById('topbarSub');if(topSub)topSub.textContent=`${cfg.nome} • carteira vencida filtrada automaticamente pela coluna Empresa da BASE AGING LIST`;const pe=document.getElementById('printEmpresa');if(pe)pe.textContent=cfg.nome+' - Painel Financeiro x Jurídico';const mt=document.getElementById('encDadosEmpresaTitulo');if(mt)mt.textContent='Dados '+cfg.nome;document.title='Kroma | Monitoramento de Cobranças';}
 function renderEstadoVazio(){DADOS=[];DADOS_VENCER=[];DADOS_RECEBIDOS=[];FONTE_ATUAL='-';renderTudo(FONTE_ATUAL);const dz=document.getElementById('dzStatus');if(dz)dz.innerHTML=`<span class="text-secondary"><i class="fa-regular fa-folder-open me-1"></i>Nenhuma BASE AGING LIST integrada carregada</span>`;}
@@ -188,45 +196,12 @@ function chaveUnicaAberto(chave,d){const dt=d&&d.venc?`${d.venc.getFullYear()}-$
 function notasDaEmpresa(chave){try{return JSON.parse(localStorage.getItem(empresaKeyPorChave(chave,'notas_juridico'))||'{}')}catch(e){return{}}}
 function statusPersistidoEmpresa(chave,key){const notas=notasDaEmpresa(chave),n=notas[key];return normalizarStatus(n&&n.status?n.status:STATUS_DEFAULT)}
 function prazoPersistidoEmpresa(chave,key){const notas=notasDaEmpresa(chave),n=notas[key];if(n&&Object.prototype.hasOwnProperty.call(n,'prazo'))return n.prazo?parseDataLocalIso(n.prazo):null;return null}
-function serializarDadosEmpresa(chave,nomeArq,dados,aVencer,recebidos){const payload={empresa:chave,nome:nomeArq,modeloBase:'BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06 v3',clienteOrigem:'NOME_FANTASIA_FALLBACK_FORNECEDOR_G_ANTIGO',quando:new Date().toISOString(),dados:dados.map(serializaRegistro),aVencer:aVencer.map(serializaRegistro),recebidos:recebidos.map(serializaRegistro)};try{localStorage.setItem(empresaKeyPorChave(chave,'cobranca'),JSON.stringify(payload))}catch(e){console.warn('Não foi possível persistir toda a base de '+chave,e)}}
+function serializarDadosEmpresa(chave,nomeArq,dados,aVencer,recebidos){const payload={empresa:chave,nome:nomeArq,modeloBase:'BASE AGING LIST integrada + TITULOS ANTIGOS ATE 30.06',clienteOrigem:'COLUNA_S',quando:new Date().toISOString(),dados:dados.map(serializaRegistro),aVencer:aVencer.map(serializaRegistro),recebidos:recebidos.map(serializaRegistro)};try{localStorage.setItem(empresaKeyPorChave(chave,'cobranca'),JSON.stringify(payload))}catch(e){console.warn('Não foi possível persistir toda a base de '+chave,e)}}
 function processarWorkbook(wb,nomeArq){
-  // Identifica a aba principal de forma tolerante. O GitHub pode servir versões da base
-  // com pequenas diferenças de nome, ordem de abas ou posição das colunas.
-  const localizarAbaRecebimentos=()=>{
-    const nomes=[...(wb.SheetNames||[])];
-    const normalizaNome=n=>semAcento(n||'').replace(/[^a-z0-9]+/g,' ').trim();
-    const preferida=nomes.find(n=>normalizaNome(n)==='base recebimentos')||nomes.find(n=>normalizaNome(n).includes('base receb'));
-    const ordem=preferida?[preferida,...nomes.filter(n=>n!==preferida)]:nomes;
-    for(const nome of ordem){
-      // Nunca usa a aba historica como base principal.
-      if(normalizaNome(nome).includes('titulos aberto antigo'))continue;
-      const sh=wb.Sheets[nome];if(!sh)continue;
-      const amostra=XLSX.utils.sheet_to_json(sh,{header:1,raw:true,defval:''});
-      if(!amostra.length)continue;
-      const limite=Math.min(amostra.length,10);
-      for(let hr=0;hr<limite;hr++){
-        const h=amostra[hr]||[];
-        const temEmpresa=mapCol(h,['Empresa','Filial'])>=0;
-        const temSaldo=mapCol(h,['Total faltando','Total Faltando','Saldo Parcela','Valor Devedor'])>=0;
-        const temVenc=mapCol(h,['Data do Vencimento','Data Vencimento','Vencimento'])>=0;
-        const temTitulo=mapCol(h,['N° da Nota Fiscal','Nº da Nota Fiscal','No da Nota Fiscal','Nota Fiscal','Documento'])>=0;
-        // NOME FANTASIA e o campo preferencial, mas Fornecedor e aceito como fallback
-        // para evitar bloquear a carga caso uma versao publicada ainda nao tenha a coluna nova.
-        const temCliente=mapCol(h,['NOME FANTASIA','Nome Fantasia','Fornecedor','Nome Fantasia do Parceiro','Nome Parceiro'])>=0;
-        if(temEmpresa&&temSaldo&&temVenc&&temTitulo&&temCliente)return{nome,headerRow:hr};
-      }
-    }
-    // Se a guia BASE RECEBIMENTOS existe, usa-a mesmo quando algum cabecalho mudou.
-    if(preferida)return{nome:preferida,headerRow:0};
-    return null;
-  };
-  const abaInfo=localizarAbaRecebimentos();
-  if(!abaInfo){console.warn('BASE AGING LIST: aba principal de recebimentos não identificada.',wb.SheetNames);return false}
-  const nomeAba=abaInfo.nome;
+  const nomeAba=wb.Sheets['BASE RECEBIMENTOS']?'BASE RECEBIMENTOS':wb.SheetNames[0];
   const ws=wb.Sheets[nomeAba];
-  const todasLinhas=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
-  const rows=todasLinhas.slice(abaInfo.headerRow||0);
-  if(!rows.length){console.warn('BASE AGING LIST: aba principal vazia.');return false}
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
+  if(!rows.length){alert('Planilha vazia.');return}
   const headers=rows[0];
   // A aba CADASTRO CLIENTE complementa a base com CPF/CNPJ sem alterar o código do cliente exibido nas telas.
   const cadastroClientePorCodigo={};
@@ -247,14 +222,12 @@ function processarWorkbook(wb,nomeArq){
       }
     }
   }
-  const cEmpresa=mapCol(headers,['Empresa','Filial']);
-  const cCodigo=mapCol(headers,['Código do cliente/fornecedor','Codigo do cliente/fornecedor','Código do cliente','Codigo do cliente','Código Parceiro','Codigo Parceiro']);
-  // BASE RECEBIMENTOS: NOME FANTASIA e sempre a fonte preferencial do nome do cliente.
-  // Se a versao publicada no GitHub ainda nao trouxer essa coluna, Fornecedor e usado apenas como fallback.
-  const cNomeFantasia=mapCol(headers,['NOME FANTASIA','Nome Fantasia']);
-  const cFornecedor=mapCol(headers,['Fornecedor','Nome Fantasia do Parceiro','Nome Parceiro']);
-  const cCli=cNomeFantasia>=0?cNomeFantasia:cFornecedor;
-  const cTitulo=mapCol(headers,['N° da Nota Fiscal','Nº da Nota Fiscal','No da Nota Fiscal','Nota Fiscal','Documento']);
+  const cEmpresa=mapCol(headers,['Empresa']);
+  const cCodigo=mapCol(headers,['Código do cliente/fornecedor','Codigo do cliente/fornecedor','Código do cliente','Codigo do cliente']);
+  const cCli=18; // COLUNA S da planilha: NOME FANTASIA. A coluna C permanece apenas como código do cliente/fornecedor.
+  if(headers.length<=cCli){alert('A nova BASE AGING LIST não possui a coluna S necessária para o nome do cliente.');return;}
+  if(norm(headers[cCli])!==norm('NOME FANTASIA')){alert('A coluna S da nova BASE AGING LIST deve ser "NOME FANTASIA". Cabeçalho encontrado: '+(headers[cCli]||'(vazio)'));return;}
+  const cTitulo=mapCol(headers,['N° da Nota Fiscal','Nº da Nota Fiscal','No da Nota Fiscal','Nota Fiscal']);
   const cVenc=mapCol(headers,['Data do Vencimento','Data Vencimento','Vencimento']);
   const cSaldo=mapCol(headers,['Total faltando','Total Faltando','Saldo Parcela','Valor Devedor']);
   const cDataDoc=mapCol(headers,['Data do Documento','Data Documento']);
@@ -265,10 +238,9 @@ function processarWorkbook(wb,nomeArq){
   const cTipoDoc=mapCol(headers,['Tipo de doc','Tipo Documento']);
   const cObs=mapCol(headers,['Observação do lançamento','Observacao do lancamento','Observação']);
   const cReceb=mapCol(headers,['Criado mediante execução do pagamento','Criado mediante execucao do pagamento']);
-  const obrigatorias=[['Empresa',cEmpresa],['N° da Nota Fiscal/Documento',cTitulo],['Data do Vencimento',cVenc],['Total faltando/Saldo Parcela',cSaldo]];
+  const obrigatorias=[['Empresa',cEmpresa],['Coluna S - NOME FANTASIA',cCli],['N° da Nota Fiscal',cTitulo],['Data do Vencimento',cVenc],['Total faltando',cSaldo]];
   const faltando=obrigatorias.filter(x=>x[1]<0).map(x=>x[0]);
-  if(faltando.length){console.warn('BASE AGING LIST: colunas essenciais não encontradas: '+faltando.join(', '),headers);return false}
-  if(cCli<0)console.warn('BASE AGING LIST: NOME FANTASIA/Fornecedor não localizado. Será usado o cadastro do cliente ou o código como fallback.');
+  if(faltando.length){alert('A nova base não contém as colunas obrigatórias: '+faltando.join(', '));return}
 
   const hoje=new Date();hoje.setHours(0,0,0,0);
   const porEmpresa={energia:[],gestao:[]},vencerPorEmpresa={energia:[],gestao:[]},recebPorEmpresa={energia:[],gestao:[]};
@@ -277,9 +249,8 @@ function processarWorkbook(wb,nomeArq){
     const r=rows[i];if(!r||r.every(x=>x===''||x==null))continue;
     const chave=classificarEmpresaBase(r[cEmpresa]);
     if(!chave){estat.ignoradasEmpresa++;continue}
+    const cli=(r[cCli]||'').toString().trim();if(!cli)continue;
     const codigo=cCodigo>=0?(r[cCodigo]||'').toString().trim():'';
-    const cadastro=cadastroClientePorCodigo[codigo]||{};
-    const cli=((cCli>=0?r[cCli]:'')||cadastro.nome||codigo||'Cliente sem nome').toString().trim();
     const titulo=(r[cTitulo]!==undefined&&r[cTitulo]!==null?r[cTitulo]:'').toString().trim();if(!titulo)continue;
     const venc=cVenc>=0?parseData(r[cVenc]):null;if(venc)venc.setHours(0,0,0,0);
     const saldo=parseNum(r[cSaldo]);
@@ -287,6 +258,7 @@ function processarWorkbook(wb,nomeArq){
     const totalReceb=cTotalReceb>=0?parseNum(r[cTotalReceb]):0;
     const jurosDesc=cJurosDesc>=0?parseNum(r[cJurosDesc]):0;
     const situacaoBase=cReceb>=0?(r[cReceb]||'').toString():'';
+    const cadastro=cadastroClientePorCodigo[codigo]||{};
     const base={id:'TIT-'+titulo,titulo,cli,doc:codigo,codigoCliente:codigo,cnpj:cadastro.cnpj||'',venc,empresaLegal:(r[cEmpresa]||'').toString(),dataDocumento:cDataDoc>=0?parseData(r[cDataDoc]):null,dataLancamento:cDataLanc>=0?parseData(r[cDataLanc]):null,dataPagamento:dataPg,tipoDocumento:cTipoDoc>=0?(r[cTipoDoc]||'').toString():'',observacao:cObs>=0?(r[cObs]||'').toString():'',situacaoBase,totalRecebido:totalReceb,jurosDesconto:jurosDesc};
 
     // Recebidos: a nova base traz simultaneamente saldo zerado, DataPg, Total Recebido e indicador "Recebido".
@@ -317,7 +289,7 @@ function processarWorkbook(wb,nomeArq){
       const aDocumento=mapCol(ah,['Documento']);
       const aSerie=mapCol(ah,['Serie do Documento','Série do Documento']);
       const aCodigo=mapCol(ah,['Codigo Parceiro','Código Parceiro']);
-      const aCli=6; // COLUNA G da aba TITULOS ABERTO ANTIGO ATE 30.06: nome do cliente (Nome Fantasia do Parceiro)
+      const aCli=mapCol(ah,['Nome Fantasia do Parceiro','Nome Fantasia']);
       const aSaldo=mapCol(ah,['Saldo Parcela','Valor Devedor']);
       const aRazao=mapCol(ah,['Nome Parceiro','Razao','Razão']);
       const aCnpj=mapCol(ah,['CNPJ/CPF','CNPJ','CPF']);
@@ -325,12 +297,10 @@ function processarWorkbook(wb,nomeArq){
       const aVenc=mapCol(ah,['Data Vencimento','Data do Vencimento','Vencimento']);
       const aTipo=mapCol(ah,['Tipo Documento','Tipo de doc']);
       const aObs=mapCol(ah,['Observacoes','Observações','Observacao','Observação']);
-      if(ah.length<=aCli){console.warn('A aba TITULOS ABERTO ANTIGO ATE 30.06 não possui a coluna G; títulos históricos serão ignorados.');}
       const chavesExistentes=new Set();
       Object.entries(porEmpresa).forEach(([k,lista])=>lista.forEach(d=>chavesExistentes.add(chaveUnicaAberto(k,d))));
       Object.entries(vencerPorEmpresa).forEach(([k,lista])=>lista.forEach(d=>chavesExistentes.add(chaveUnicaAberto(k,d))));
       for(let ai=1;ai<antRows.length;ai++){
-        if(ah.length<=aCli)break;
         const r=antRows[ai];if(!r||r.every(x=>x===''||x==null))continue;
         const filial=aFilial>=0?(r[aFilial]||'').toString():'';
         const chave=classificarEmpresaBase(filial);if(!chave)continue;
@@ -353,7 +323,11 @@ function processarWorkbook(wb,nomeArq){
     }
   }
 
+  estat.baixadosOcultos=0;
   Object.keys(porEmpresa).forEach(k=>{
+    const antes=porEmpresa[k].length;
+    porEmpresa[k]=porEmpresa[k].filter(d=>!tituloEstaBaixado(k,d));
+    estat.baixadosOcultos+=antes-porEmpresa[k].length;
     porEmpresa[k].sort((a,b)=>b.valor-a.valor);
     vencerPorEmpresa[k].sort((a,b)=>(a.venc-b.venc)||b.valor-a.valor);
     recebPorEmpresa[k].sort((a,b)=>(b.dataPagamento||0)-(a.dataPagamento||0)||b.valor-a.valor);
@@ -363,10 +337,9 @@ function processarWorkbook(wb,nomeArq){
   DADOS=porEmpresa[EMPRESA_ATIVA]||[];DADOS_VENCER=vencerPorEmpresa[EMPRESA_ATIVA]||[];DADOS_RECEBIDOS=recebPorEmpresa[EMPRESA_ATIVA]||[];
   FONTE_ATUAL=nomeArq;renderTudo(nomeArq);
   const dz=document.getElementById('dzStatus');
-  if(dz)dz.innerHTML=`<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Base integrada processada</span><br><span class="text-secondary">${estat.vencidos} vencidos • ${estat.aVencer} a vencer • ${estat.recebidos} recebidos</span><br><span class="text-secondary">Incluidos ${estat.vencidosAntigos||0} titulo(s) da aba TITULOS ABERTO ANTIGO ATE 30.06${estat.antigosIgnoradosDuplicidade?` • ${estat.antigosIgnoradosDuplicidade} duplicado(s) ignorado(s)`:''}</span>`;
-  return true;
+  if(dz)dz.innerHTML=`<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Base integrada processada</span><br><span class="text-secondary">${DADOS.length} vencidos • ${estat.aVencer} a vencer • ${estat.recebidos} recebidos</span><br><span class="text-secondary">Incluidos ${estat.vencidosAntigos||0} titulo(s) da aba TITULOS ABERTO ANTIGO ATE 30.06${estat.antigosIgnoradosDuplicidade?` • ${estat.antigosIgnoradosDuplicidade} duplicado(s) ignorado(s)`:''}${estat.baixadosOcultos?` • ${estat.baixadosOcultos} baixa(s) manual(is) ocultada(s)`:''}</span>`;
 }
-function lerArquivo(file){const nome=file.name;const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array',cellDates:false});const ok=processarWorkbook(wb,nome);if(ok===false)alert('Não foi possível identificar a estrutura da BASE AGING LIST selecionada. Verifique a planilha e tente novamente.')}catch(err){alert('Erro ao ler o arquivo: '+err.message)}};reader.readAsArrayBuffer(file)}
+function lerArquivo(file){const nome=file.name;const reader=new FileReader();reader.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array',cellDates:false});processarWorkbook(wb,nome)}catch(err){alert('Erro ao ler o arquivo: '+err.message)}};reader.readAsArrayBuffer(file)}
 function miniKpi(cor,ico,label,valor,sub){return`<div class="col-12 col-sm-6 col-xl-3"><div class="kpi-card b-${cor} d-flex align-items-center gap-3"><div class="kpi-ico i-${cor}"><i class="fa-solid ${ico}"></i></div><div><div class="kpi-label">${label}</div><div class="kpi-value">${valor}</div><div class="kpi-sub">${sub||''}</div></div></div></div>`}const emptyState=msg=>`<div class="empty-state"><i class="fa-regular fa-folder-open d-block"></i>${msg}</div>`;
 function renderTudo(fonte){FONTE_ATUAL=fonte||'-';renderKPIs();renderAging();renderStatus();renderPainelExecutivo();atualizarBadges();const ativa=document.querySelector('.tab-section.active');if(ativa&&ativa.id!=='tab-visaogeral')abrirTab(ativa.id.replace('tab-',''));document.getElementById('footData').textContent='Atualizado: '+new Date().toLocaleDateString('pt-BR')}
 function atualizarBadges(){const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v||''};set('badgeTitulos',DADOS.length);set('badgeUnificada',obterDadosUnificados().length);set('badgeAVencer',DADOS_VENCER.length);set('badgeRecebidos',DADOS_RECEBIDOS.length);set('badgeNotif',DADOS.filter(d=>STATUS_NOTIFICACOES.includes(d.status)).length);set('badgePrazos',(DADOS.filter(d=>d.prazo&&(d.prazo-new Date())/86400000<=7).length)||'');set('badgeClientes',new Set(DADOS.map(d=>norm(d.cli))).size);set('badgeCobranca',typeof cobKpis==='function'?cobKpis().sem.length:0);set('badgeEncargos',(DADOS_RECEBIDOS||[]).filter(d=>{const dr=typeof d.diasReceber==='number'?d.diasReceber:(d.venc&&d.dataPagamento?Math.round((d.dataPagamento-d.venc)/86400000):0);return dr>0}).length);if(typeof nfAtualizarBadge==='function')nfAtualizarBadge()}
@@ -394,7 +367,7 @@ function renderTitulos(){
     return true;
   });
   lista.sort((a,b)=>ord==='dias'?b.dias-a.dias:ord==='prazo'?((a.prazo||8e15)-(b.prazo||8e15)):ord==='cli'?a.cli.localeCompare(b.cli):b.valor-a.valor);
-  document.getElementById('tblTitulos').innerHTML=lista.length?lista.slice(0,200).map(t=>{const stt=statusMap[t.status];const diasCls=t.dias>=90?'text-danger fw-bold':(t.dias>=30?'text-warning fw-semibold':'text-secondary');const prazoCls=t.prazo&&(t.prazo-new Date())/86400000<=7?'text-danger fw-semibold':'';return`<tr><td><span class="fw-semibold text-primary">${t.titulo||t.id.replace(/^TIT-/,'')}</span></td><td><div class="cli-nome">${t.cli}${t.rj?' <span class="badge-soft bg-soft-roxo">RJ</span>':''}</div><div class="cli-doc">${t.doc}</div></td><td class="text-center">${fmtData(t.venc)}</td><td class="text-center ${diasCls}">${t.dias} d</td><td class="text-end fw-semibold">${brl(t.valor)}</td><td class="text-center">${statusSelect(t.persistKey||t.id,t.status)}</td><td class="text-center ${prazoCls}">${prazoInput(t.persistKey||t.id,t.prazo,t.status)}${t.status==='notificacao'&&!t.prazo?'<div class="kpi-sub mt-1 text-warning">Informe o prazo</div>':''}</td></tr>`}).join(''):`<tr><td colspan="7">${emptyState('Nenhum título encontrado no período de vencimento informado.')}</td></tr>`;
+  document.getElementById('tblTitulos').innerHTML=lista.length?lista.slice(0,200).map(t=>{const stt=statusMap[t.status];const diasCls=t.dias>=90?'text-danger fw-bold':(t.dias>=30?'text-warning fw-semibold':'text-secondary');const prazoCls=t.prazo&&(t.prazo-new Date())/86400000<=7?'text-danger fw-semibold':'';return`<tr><td><div class="d-flex align-items-center justify-content-between gap-2"><span class="fw-semibold text-primary">${t.titulo||t.id.replace(/^TIT-/,'')}</span><button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 btn-baixar-titulo" data-baixa-key="${escAttr(t.persistKey||t.id)}" title="Dar baixa e retirar este título do Aging List"><i class="fa-solid fa-check me-1"></i>Baixar</button></div></td><td><div class="cli-nome">${t.cli}${t.rj?' <span class="badge-soft bg-soft-roxo">RJ</span>':''}</div><div class="cli-doc">${t.doc}</div></td><td class="text-center">${fmtData(t.venc)}</td><td class="text-center ${diasCls}">${t.dias} d</td><td class="text-end fw-semibold">${brl(t.valor)}</td><td class="text-center">${statusSelect(t.persistKey||t.id,t.status)}</td><td class="text-center ${prazoCls}">${prazoInput(t.persistKey||t.id,t.prazo,t.status)}${t.status==='notificacao'&&!t.prazo?'<div class="kpi-sub mt-1 text-warning">Informe o prazo</div>':''}</td></tr>`}).join(''):`<tr><td colspan="7">${emptyState('Nenhum título encontrado no período de vencimento informado.')}</td></tr>`;
   document.getElementById('titInfo').textContent=`Exibindo ${Math.min(lista.length,200)} de ${lista.length} títulos${de||ate?' • período de vencimento filtrado':''}`;
   document.getElementById('titFonte').textContent=FONTE_ATUAL;
 }
@@ -479,7 +452,7 @@ function carregarDemo(){const base=[
 ['NS','KROMA COMERCIALIZADORA DE ENERGIA LTDA','C00003','RAZAO SOCIAL CLIENTE FUTURO','', '01/09/2026','01/09/2026','50002','30/09/2026','',12000,'',0,0,'','','Exemplo a vencer','A Receber','CLIENTE FUTURO'],
 ['NS','KROMA GESTAO E SERVICOS EM ENERGIA ELETRICA LTDA - EPP','C00002','RAZAO SOCIAL CLIENTE RECEBIDO','', '01/06/2026','01/06/2026','101','10/06/2026','',0,'18/06/2026',50,4850,'','','Exemplo recebido','Recebido','CLIENTE RECEBIDO']];const ws=XLSX.utils.aoa_to_sheet(base);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'BASE RECEBIMENTOS');processarWorkbook(wb,'BASE AGING LIST (exemplo).xlsx')}
 function abrirTab(tab){document.querySelectorAll('.tab-section').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.nav-link[data-tab]').forEach(a=>a.classList.remove('active'));const sec=document.getElementById('tab-'+tab);if(sec)sec.classList.add('active');const nav=document.querySelector(`.nav-link[data-tab="${tab}"]`);if(nav)nav.classList.add('active');const title={visaogeral:'Visão Geral',unificada:'Visão Unificada',titulos:'Aging List',avencer:'Títulos a Vencer',recebidos:'Títulos Recebidos',notificacoes:'Notificar / Judicial',prazos:'Prazos & Notificação',cobranca:'Central de Cobrança',nfs:'Central de NFs',clientes:'Clientes',encargos:'Cobrança de Encargos'}[tab]||'Visão Geral';document.querySelector('.topbar h1').textContent=title;const sub=document.getElementById('topbarSub');if(sub)sub.textContent=tab==='unificada'?'Kroma Energia + Kroma Gestão • títulos vencidos consolidados em uma única visão':`${empresaCfg().nome} • carteira filtrada automaticamente pela coluna Empresa da BASE AGING LIST`;if(tab==='unificada')renderUnificada();if(tab==='titulos')renderTitulos();if(tab==='avencer')renderAVencer();if(tab==='recebidos')renderRecebidos();if(tab==='encargos')encRender();if(tab==='cobranca')cobRender();if(tab==='nfs')nfRender();if(tab==='notificacoes')renderNotificacoes();if(tab==='prazos')renderPrazos();if(tab==='clientes')renderClientes();sidebar.classList.remove('show');overlay.classList.remove('show')}
-document.querySelectorAll('.nav-link[data-tab]').forEach(a=>a.addEventListener('click',()=>abrirTab(a.dataset.tab)));document.getElementById('limparVencT')?.addEventListener('click',()=>{const a=document.getElementById('filtroVencDeT'),b=document.getElementById('filtroVencAteT');if(a)a.value='';if(b)b.value='';renderTitulos()});document.addEventListener('input',e=>{if(e.target.id==='buscaT')renderTitulos();if(e.target.id==='buscaC')renderClientes();if(e.target.id==='buscaVencer')renderAVencer();if(e.target.id==='buscaReceb')renderRecebidos();if(e.target.id==='buscaUnif')renderUnificada()});document.addEventListener('change',e=>{if(['ordenarT','filtroStatusT','filtroVencDeT','filtroVencAteT'].includes(e.target.id))renderTitulos();if(e.target.id==='filtroPrazo')renderPrazos();if(['filtroVencer','ordenarVencer'].includes(e.target.id))renderAVencer();if(['filtroRecebPeriodo','ordenarReceb'].includes(e.target.id))renderRecebidos();if(['filtroEmpresaUnif','filtroStatusUnif','ordenarUnif'].includes(e.target.id))renderUnificada();if(e.target.classList.contains('status-select'))setStatus(e.target.dataset.id,e.target.value);if(e.target.classList.contains('prazo-notificacao-input'))setPrazo(e.target.dataset.id,e.target.value)});
+document.querySelectorAll('.nav-link[data-tab]').forEach(a=>a.addEventListener('click',()=>abrirTab(a.dataset.tab)));document.addEventListener('click',e=>{const b=e.target.closest('.btn-baixar-titulo');if(b){e.preventDefault();e.stopPropagation();baixarTituloManual(b.dataset.baixaKey)}});document.getElementById('limparVencT')?.addEventListener('click',()=>{const a=document.getElementById('filtroVencDeT'),b=document.getElementById('filtroVencAteT');if(a)a.value='';if(b)b.value='';renderTitulos()});document.addEventListener('input',e=>{if(e.target.id==='buscaT')renderTitulos();if(e.target.id==='buscaC')renderClientes();if(e.target.id==='buscaVencer')renderAVencer();if(e.target.id==='buscaReceb')renderRecebidos();if(e.target.id==='buscaUnif')renderUnificada()});document.addEventListener('change',e=>{if(['ordenarT','filtroStatusT','filtroVencDeT','filtroVencAteT'].includes(e.target.id))renderTitulos();if(e.target.id==='filtroPrazo')renderPrazos();if(['filtroVencer','ordenarVencer'].includes(e.target.id))renderAVencer();if(['filtroRecebPeriodo','ordenarReceb'].includes(e.target.id))renderRecebidos();if(['filtroEmpresaUnif','filtroStatusUnif','ordenarUnif'].includes(e.target.id))renderUnificada();if(e.target.classList.contains('status-select'))setStatus(e.target.dataset.id,e.target.value);if(e.target.classList.contains('prazo-notificacao-input'))setPrazo(e.target.dataset.id,e.target.value)});
 function imprimirAba(){const ativa=document.querySelector('.tab-section.active');const cfg=empresaCfg();document.getElementById('phMeta').textContent='Base: '+FONTE_ATUAL+' • Emitido em '+new Date().toLocaleString('pt-BR');document.getElementById('phTitle').textContent=document.querySelector('.topbar h1').textContent;document.getElementById('phSub').textContent=cfg.nome+' - Monitoramento de Cobrança';const old=document.title;document.title=cfg.nome.replace(/[^\w]+/g,'_')+'_'+document.getElementById('phTitle').textContent.replace(/[^\w]+/g,'_');window.print();setTimeout(()=>{document.title=old},400)}
 document.getElementById('fileInput').addEventListener('change',e=>{if(e.target.files[0])lerArquivo(e.target.files[0])});const dz=document.getElementById('dropzone');['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>{if(e.dataTransfer.files[0])lerArquivo(e.dataTransfer.files[0])});
 /* ==== AUTO-CARGA DA BASE INTEGRADA PUBLICADA NO GITHUB ==== */
@@ -494,12 +467,11 @@ async function carregarBaseRemota(){
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     const buf=await resp.arrayBuffer();
     const wb=XLSX.read(new Uint8Array(buf),{type:'array',cellDates:false});
-    const ok=processarWorkbook(wb,nome);
-    if(ok===false)throw new Error('Estrutura da BASE AGING LIST publicada não reconhecida.');
+    processarWorkbook(wb,nome);
     setBaseRemotaNome(nome);
     if(dz)dz.innerHTML=`<span class="text-success"><i class="fa-solid fa-cloud-check me-1"></i>Base publicada carregada</span>: ${DADOS.length} títulos • <span class="text-secondary">${nome}</span>`;
     return true;
-  }catch(e){console.warn('Falha ao carregar base publicada:',e);if(dz)dz.innerHTML=`<span class="text-warning"><i class="fa-solid fa-triangle-exclamation me-1"></i>Base publicada não carregada</span><br><span class="text-secondary">Tentando dados salvos neste navegador...</span>`;return false;}
+  }catch(e){return false;}
 }
 async function inicializarSistemaEmpresa(){atualizarIdentidadeEmpresa();if(typeof encCarregarConfigEmpresa==='function')encCarregarConfigEmpresa();if(await carregarBaseRemota())return;if(restaurarBase())return;renderEstadoVazio();}
 /* ===== MÓDULO COBRANÇA DE ENCARGOS ===== */
