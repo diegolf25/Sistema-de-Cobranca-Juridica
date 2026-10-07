@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-07T19:03:53.856Z",
+  "empresas": {
+    "energia": {
+      "tit|2|01760|20260902": {
+        "status": "notificacao",
+        "atualizadoEm": "2026-10-07T19:03:53.052Z",
+        "compartilhadoAtualizadoEm": "2026-10-07T19:03:53.856Z"
+      }
+    },
+    "gestao": {}
+  }
+}
