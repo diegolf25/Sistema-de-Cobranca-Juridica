@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-07T19:04:27.023Z",
+  "updatedAt": "2026-10-07T19:05:37.476Z",
   "empresas": {
     "energia": {
       "tit|2|01760|20260902": {
-        "status": "notificacao",
-        "atualizadoEm": "2026-10-07T19:03:53.052Z",
-        "compartilhadoAtualizadoEm": "2026-10-07T19:04:27.023Z",
+        "status": "sistema",
+        "atualizadoEm": "2026-10-07T19:05:36.984Z",
+        "compartilhadoAtualizadoEm": "2026-10-07T19:05:37.476Z",
         "envioNotificacao": "2026-10-06",
         "envioNotificacaoAtualizadoEm": "2026-10-07T19:04:15.794Z",
         "prazo": "2026-10-06",
