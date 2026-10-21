@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-21T16:22:59.883Z",
+  "updatedAt": "2026-10-21T16:25:14.101Z",
   "empresas": {
     "energia": {
       "tit|2|01760|20260902": {
@@ -176,6 +176,11 @@
         "status": "acao",
         "atualizadoEm": "2026-10-21T16:23:00.289Z",
         "compartilhadoAtualizadoEm": "2026-10-21T16:22:59.882Z"
+      },
+      "tit|349|03018|20260630": {
+        "status": "acao",
+        "atualizadoEm": "2026-10-21T16:25:14.481Z",
+        "compartilhadoAtualizadoEm": "2026-10-21T16:25:14.101Z"
       }
     }
   }
